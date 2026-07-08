@@ -1,0 +1,9 @@
+data/
+documentation/
+logs/
+checkpoints/
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+latex/
