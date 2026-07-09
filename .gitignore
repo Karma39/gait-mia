@@ -7,3 +7,9 @@ __pycache__/
 .DS_Store
 .ipynb_checkpoints/
 latex/generated/
+latex/*.aux
+latex/*.fdb_latexmk
+latex/*.fls
+latex/*.log
+latex/*.out
+latex/*.synctex.gz
