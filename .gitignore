@@ -1,5 +1,6 @@
 data/
 logs/
+embeddings/
 checkpoints/
 documentation/
 __pycache__/
