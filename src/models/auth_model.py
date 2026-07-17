@@ -15,8 +15,9 @@ class AuthModel(nn.Module):
       concat([t1, t2], dim=1)                    → (B, 32, 128)
       LSTM(input=128, hidden=64, layers=2)        → last hidden state (B, 64)
       FC(64 → 2)                                  → logits (B, 2)
-        index 0 = different person
-        index 1 = same person
+        index 0 = same person
+        index 1 = different person
+      softmax[:, 1] = P(different person); attack success = softmax[:, 1] < 0.5
     """
 
     def __init__(self, cnn_encoder: GaitCNN):
@@ -33,10 +34,10 @@ class AuthModel(nn.Module):
         self.fc = nn.Linear(64, 2)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
-        """Return logits (B, 2) for [different person, same person].
+        """Return logits (B, 2) for [same person, different person].
 
-        D5 label convention: raw {1,2} → after (y-1) → {0=different, 1=same},
-        so softmax[:, 1] is P(same person).
+        D5 label convention: raw {1,2} → after (y-1) → {0=same, 1=different},
+        so softmax[:, 1] is P(different person).
         """
         t1 = self.cnn.get_feature_maps(x1)       # (B, 16, 128)
         t2 = self.cnn.get_feature_maps(x2)       # (B, 16, 128)
@@ -45,7 +46,7 @@ class AuthModel(nn.Module):
         return self.fc(out[:, -1, :])            # (B, 2)
 
     def similarity(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
-        """Return P(same person) ∈ [0, 1] for each pair, no grad."""
+        """Return P(different person) ∈ [0, 1] for each pair, no grad."""
         with torch.no_grad():
             logits = self.forward(x1, x2)
-            return torch.softmax(logits, dim=1)[:, 1]   # P(same person)
+            return torch.softmax(logits, dim=1)[:, 1]   # P(different person)
