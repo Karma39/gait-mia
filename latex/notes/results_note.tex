@@ -1,0 +1,445 @@
+\documentclass[10pt,twocolumn]{IEEEtran}
+
+% ── packages ──────────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{siunitx}
+\sisetup{detect-weight=true, mode=text}
+
+% ── convenience ───────────────────────────────────────────────────────────────
+\newcommand{\tbd}{\textcolor{gray}{--}}
+\newcommand{\na}{\textcolor{gray}{n/a}}
+\newcommand{\sect}[1]{\vspace{2pt}\noindent\textbf{#1.}}
+
+% ── graceful fallbacks (overridden by \input below) ───────────────────────────
+\providecommand{\whuGAITCnnTestAcc}{\tbd}
+\providecommand{\whuGAITAuthTestAcc}{\tbd}
+\providecommand{\whuGAITAuthTestAUC}{\tbd}
+\providecommand{\whuGAITAuthSep}{\tbd}
+\providecommand{\whuGAITAuthOverfitAcc}{\tbd}
+\providecommand{\uciharCnnTestAcc}{\tbd}
+\providecommand{\uciharAuthTestAcc}{\tbd}
+\providecommand{\uciharAuthTestAUC}{\tbd}
+\providecommand{\uciharAuthSep}{\tbd}
+\providecommand{\uciharAuthOverfitAcc}{\tbd}
+\providecommand{\wisdmCnnTestAcc}{\tbd}
+\providecommand{\wisdmAuthTestAcc}{\tbd}
+\providecommand{\wisdmAuthTestAUC}{\tbd}
+\providecommand{\wisdmAuthSep}{\tbd}
+\providecommand{\wisdmAuthOverfitAcc}{\tbd}
+\providecommand{\combinedCnnTestAcc}{\tbd}
+\providecommand{\combinedAuthTestAcc}{\tbd}
+\providecommand{\combinedAuthTestAUC}{\tbd}
+\providecommand{\combinedAuthSep}{\tbd}
+\providecommand{\combinedAuthOverfitAcc}{\tbd}
+\providecommand{\whuGAITSimplDAUC}{\tbd}
+\providecommand{\whuGAITSimplDDeltaGap}{\tbd}
+\providecommand{\uciharSimplDAUC}{\tbd}
+\providecommand{\uciharSimplDDeltaGap}{\tbd}
+\providecommand{\wisdmSimplDAUC}{\tbd}
+\providecommand{\wisdmSimplDDeltaGap}{\tbd}
+\providecommand{\combinedSimplDAUC}{\tbd}
+\providecommand{\combinedSimplDDeltaGap}{\tbd}
+\providecommand{\whuGAITGreyLiraRawAUC}{\tbd}
+\providecommand{\whuGAITGreyLiraLfAUC}{\tbd}
+\providecommand{\whuGAITGreyLiraMfAUC}{\tbd}
+\providecommand{\uciharGreyLiraRawAUC}{\tbd}
+\providecommand{\uciharGreyLiraLfAUC}{\tbd}
+\providecommand{\uciharGreyLiraMfAUC}{\tbd}
+\providecommand{\wisdmGreyLiraRawAUC}{\tbd}
+\providecommand{\wisdmGreyLiraLfAUC}{\tbd}
+\providecommand{\wisdmGreyLiraMfAUC}{\tbd}
+\providecommand{\combinedGreyLiraRawAUC}{\tbd}
+\providecommand{\combinedGreyLiraLfAUC}{\tbd}
+\providecommand{\combinedGreyLiraMfAUC}{\tbd}
+\providecommand{\whuGAITWarmLiraRawAUC}{\tbd}
+\providecommand{\whuGAITWarmLiraLfAUC}{\tbd}
+\providecommand{\whuGAITWarmLiraMfAUC}{\tbd}
+\providecommand{\uciharWarmLiraRawAUC}{\tbd}
+\providecommand{\uciharWarmLiraLfAUC}{\tbd}
+\providecommand{\uciharWarmLiraMfAUC}{\tbd}
+\providecommand{\wisdmWarmLiraRawAUC}{\tbd}
+\providecommand{\wisdmWarmLiraLfAUC}{\tbd}
+\providecommand{\wisdmWarmLiraMfAUC}{\tbd}
+\providecommand{\combinedWarmLiraRawAUC}{\tbd}
+\providecommand{\combinedWarmLiraLfAUC}{\tbd}
+\providecommand{\combinedWarmLiraMfAUC}{\tbd}
+\providecommand{\whuGAITColdLiraRawAUC}{\tbd}
+\providecommand{\whuGAITColdLiraLfAUC}{\tbd}
+\providecommand{\whuGAITColdLiraMfAUC}{\tbd}
+\providecommand{\uciharColdLiraRawAUC}{\tbd}
+\providecommand{\uciharColdLiraLfAUC}{\tbd}
+\providecommand{\uciharColdLiraMfAUC}{\tbd}
+\providecommand{\wisdmColdLiraRawAUC}{\tbd}
+\providecommand{\wisdmColdLiraLfAUC}{\tbd}
+\providecommand{\wisdmColdLiraMfAUC}{\tbd}
+\providecommand{\combinedColdLiraRawAUC}{\tbd}
+\providecommand{\combinedColdLiraLfAUC}{\tbd}
+\providecommand{\combinedColdLiraMfAUC}{\tbd}
+\providecommand{\whuGAITComboASR}{\tbd}
+\providecommand{\whuGAITBudgetRatio}{\tbd}
+\providecommand{\whuGAITNCombos}{\tbd}
+\providecommand{\whuGAITNResistant}{\tbd}
+\providecommand{\uciharComboASR}{\tbd}
+\providecommand{\uciharBudgetRatio}{\tbd}
+\providecommand{\uciharNCombos}{\tbd}
+\providecommand{\uciharNResistant}{\tbd}
+\providecommand{\wisdmComboASR}{\tbd}
+\providecommand{\wisdmBudgetRatio}{\tbd}
+\providecommand{\wisdmNCombos}{\tbd}
+\providecommand{\wisdmNResistant}{\tbd}
+\providecommand{\combinedComboASR}{\tbd}
+\providecommand{\combinedBudgetRatio}{\tbd}
+\providecommand{\combinedNCombos}{\tbd}
+\providecommand{\combinedNResistant}{\tbd}
+
+% ── auto-generated macros ─────────────────────────────────────────────────────
+\input{../generated/compare_models_whuGAIT_metrics}
+\input{../generated/compare_models_ucihar_metrics}
+\input{../generated/compare_models_wisdm_metrics}
+\input{../generated/compare_models_combined_metrics}
+\input{../generated/compare_mia_whuGAIT_metrics}
+\input{../generated/compare_mia_ucihar_metrics}
+\input{../generated/compare_mia_wisdm_metrics}
+\input{../generated/compare_mia_combined_metrics}
+\input{../generated/compare_evasion_whuGAIT_metrics}
+\input{../generated/compare_evasion_ucihar_metrics}
+\input{../generated/compare_evasion_wisdm_metrics}
+\input{../generated/compare_evasion_combined_metrics}
+
+% ── metadata ──────────────────────────────────────────────────────────────────
+\title{\large\textbf{Gait MIA Pipeline -- Results Summary}\\[2pt]
+       \normalsize Laboratory Note \quad v0.3}
+
+\author{Matteo Campagnaro\\
+        \small Supervisor: Prof.\ Simone Milani, University of Padova\\
+        \small \today}
+
+\begin{document}
+\maketitle
+\thispagestyle{plain}
+
+\begin{abstract}
+This note collects numerical results from the gait-based membership inference
+(MIA) pipeline across four configurations: within-dataset runs on whuGAIT,
+UCI-HAR, and WISDM, and a cross-dataset run (Combined) that reuses the whuGAIT
+CNN encoder with an LSTM authenticator retrained on subjects from all three
+sources. Values are reported without selective filtering. Observations are
+tentative and subject to revision as experimental conditions change.
+\end{abstract}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Experimental Setup}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{table}[h]
+\centering
+\caption{Subject counts and authentication pair volumes (quick-mode).}
+\label{tab:setup}
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lrrrr}
+\toprule
+Config   & Members & Non-mbr & Train pairs & Test pairs \\
+\midrule
+whuGAIT  & 98  & 20 & 66\,542 & 7\,600  \\
+UCI-HAR  & 21  &  9 & 60\,000 & 10\,000 \\
+WISDM    & 40  & 11 & 60\,000 & 10\,000 \\
+Combined & 159 & 20 & 72\,000 &  8\,000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\sect{whuGAIT} Subjects 21--118 are members; 1--20 are non-members. Pairs come
+from Dataset~\#5 (pre-segmented, step-synchronised windows). A correlation
+asymmetry in the pair structure confounds LiRA (Section~\ref{sec:mia}).
+
+\sect{Combined} whuGAIT subjects 21--118 are members; UCI-HAR train-split (21)
+and WISDM 1--40 contribute cross-dataset members; UCI-HAR test-split (9) and
+WISDM 41--51 are non-members. The CNN encoder is frozen from the whuGAIT
+checkpoint; only the LSTM is retrained. Pairs are built within each source
+separately before concatenation.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{CNN Encoder}
+\label{sec:cnn}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{table}[h]
+\centering
+\caption{CNN identification accuracy (top-1, test split, 2 epochs).}
+\label{tab:cnn}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrl}
+\toprule
+Config   & Test acc           & Notes \\
+\midrule
+whuGAIT  & \whuGAITCnnTestAcc & 98-class \\
+UCI-HAR  & \uciharCnnTestAcc  & 6-class  \\
+WISDM    & \wisdmCnnTestAcc   & 51-class \\
+Combined & \na                & frozen encoder \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Authentication Model}
+\label{sec:auth}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{table}[h]
+\centering
+\caption{CNN+LSTM authenticator on held-out test pairs. Sep $=
+\bar{P}_{\text{imp}} - \bar{P}_{\text{gen}}$. Overfit $=$ train acc $-$ test
+acc at the best checkpoint epoch.}
+\label{tab:auth}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrr}
+\toprule
+Config   & Test acc              & AUC                  & Sep                  & Overfit \\
+\midrule
+whuGAIT  & \whuGAITAuthTestAcc   & \whuGAITAuthTestAUC  & \whuGAITAuthSep      & \whuGAITAuthOverfitAcc  \\
+UCI-HAR  & \uciharAuthTestAcc    & \uciharAuthTestAUC   & \uciharAuthSep       & \uciharAuthOverfitAcc   \\
+WISDM    & \wisdmAuthTestAcc     & \wisdmAuthTestAUC    & \wisdmAuthSep        & \wisdmAuthOverfitAcc    \\
+Combined & \combinedAuthTestAcc  & \combinedAuthTestAUC & \combinedAuthSep     & \combinedAuthOverfitAcc \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Overfit column reflects the train-test accuracy gap at the best saved epoch.
+The Combined run shows the largest gap (\combinedAuthOverfitAcc), which may
+indicate the LSTM is memorising subject-level patterns from training.
+Fig.~\ref{fig:overfitting} shows per-epoch accuracy and loss curves for each
+configuration; the gap between train and test tracks overfitting directly.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../../results/analysis/models_overfitting_curves.png}
+\caption{Authentication model (CNN+LSTM) training curves per epoch. Top row:
+         accuracy; bottom row: cross-entropy loss. Dashed = test, solid = train.
+         Vertical dotted line marks the best-checkpoint epoch. Quick-mode uses
+         2 epochs so curves have not necessarily converged.}
+\label{fig:overfitting}
+\end{figure*}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Membership Inference}
+\label{sec:mia}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The per-subject membership signal is the delta
+\begin{equation}
+  \delta(s) = \bar{P}_{\text{imp}}(s) - \bar{P}_{\text{gen}}(s),
+  \label{eq:delta}
+\end{equation}
+where $\bar{P}_{\text{imp}}$ and $\bar{P}_{\text{gen}}$ are mean
+$P(\text{different person})$ over impostor and genuine pairs for subject~$s$.
+Fig.~\ref{fig:deltas} shows the per-subject distributions; a larger horizontal
+separation indicates a stronger signal.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../../results/analysis/mia_nb04_deltas.png}
+\caption{Per-subject delta distributions for members (blue) and non-members
+         (orange) across all four configurations.}
+\label{fig:deltas}
+\end{figure*}
+
+\begin{table}[h]
+\centering
+\caption{Simple-delta MIA. $\Delta$ gap $= \bar\delta_M - \bar\delta_{NM}$.}
+\label{tab:mia-signal}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrr}
+\toprule
+Config   & $\Delta$ gap            & AUC \\
+\midrule
+whuGAIT  & \whuGAITSimplDDeltaGap  & \whuGAITSimplDAUC  \\
+UCI-HAR  & \uciharSimplDDeltaGap   & \uciharSimplDAUC   \\
+WISDM    & \wisdmSimplDDeltaGap    & \wisdmSimplDAUC    \\
+Combined & \combinedSimplDDeltaGap & \combinedSimplDAUC \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{LiRA threat model comparison}
+
+Table~\ref{tab:lira-threat} compares raw-delta AUC across three threat models.
+Grey-box initialises shadows from the actual target weights; warm uses an
+independently trained surrogate; cold starts from random Xavier init. All use
+member-aware splits ($K{=}4$ quick-mode shadows).
+
+\begin{table}[h]
+\centering
+\caption{LiRA AUC (raw-delta) by threat model. ``--'' indicates no valid
+         estimates ($K{=}4 < 5$ required per subject).}
+\label{tab:lira-threat}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrr}
+\toprule
+Config   & Simple-D            & Grey                    & Warm                    & Cold \\
+\midrule
+whuGAIT  & \whuGAITSimplDAUC   & \whuGAITGreyLiraRawAUC  & \whuGAITWarmLiraRawAUC  & \whuGAITColdLiraRawAUC  \\
+UCI-HAR  & \uciharSimplDAUC    & \uciharGreyLiraRawAUC   & \uciharWarmLiraRawAUC   & \uciharColdLiraRawAUC   \\
+WISDM    & \wisdmSimplDAUC     & \wisdmGreyLiraRawAUC    & \wisdmWarmLiraRawAUC    & \wisdmColdLiraRawAUC    \\
+Combined & \combinedSimplDAUC  & \combinedGreyLiraRawAUC & \combinedWarmLiraRawAUC & \combinedColdLiraRawAUC \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{LiRA delta variant comparison}
+
+Three delta formulations are evaluated for the cold-start threat model, which
+provides the cleanest comparison as it requires no knowledge of the target:
+\begin{align*}
+\delta_\text{raw} &= \bar{p} - \bar{q}, \\
+\delta_\text{lf}  &= \overline{\mathrm{logit}(p)} - \overline{\mathrm{logit}(q)}, \\
+\delta_\text{mf}  &= \mathrm{logit}(\bar{p}) - \mathrm{logit}(\bar{q}).
+\end{align*}
+
+\begin{table}[h]
+\centering
+\caption{Cold-start LiRA AUC by delta variant. Simple-D shown for reference.}
+\label{tab:lira-variants}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrr}
+\toprule
+Config   & Simple-D            & Cold-raw                & Cold-lf                & Cold-mf \\
+\midrule
+whuGAIT  & \whuGAITSimplDAUC   & \whuGAITColdLiraRawAUC  & \whuGAITColdLiraLfAUC  & \whuGAITColdLiraMfAUC  \\
+UCI-HAR  & \uciharSimplDAUC    & \uciharColdLiraRawAUC   & \uciharColdLiraLfAUC   & \uciharColdLiraMfAUC   \\
+WISDM    & \wisdmSimplDAUC     & \wisdmColdLiraRawAUC    & \wisdmColdLiraLfAUC    & \wisdmColdLiraMfAUC    \\
+Combined & \combinedSimplDAUC  & \combinedColdLiraRawAUC & \combinedColdLiraLfAUC & \combinedColdLiraMfAUC \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Fig.~\ref{fig:roc} shows ROC curves comparing Simple-delta, grey-box, and
+cold-start LiRA across all configurations. The per-dataset subplots make the
+threat-model comparison and the whuGAIT inversion effect directly visible.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../../results/analysis/mia_roc_comparison.png}
+\caption{MIA ROC curves per configuration (quick-mode, $K{=}4$ shadows).
+         Solid: Simple-delta. Dashed: grey-box LiRA (raw, lf).
+         Dotted: cold-start LiRA (raw, lf). Combined shows Simple-delta only
+         because $K{=}4$ shadows produce no valid LiRA estimates. The whuGAIT
+         grey-box curves fall below the diagonal due to the D5 pair-correlation
+         confound.}
+\label{fig:roc}
+\end{figure*}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Evasion Attack}
+\label{sec:evasion}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{table}[h]
+\centering
+\caption{PGD impersonation attack on test impostor pairs. Budget ratio:
+         $\bar\varepsilon_{\min}/\varepsilon_{\text{target}}$ where
+         $\varepsilon_{\text{target}}$ is the median intra-subject $\ell_2$
+         distance. Resistant: combos unsolved across the full $\varepsilon$ grid.}
+\label{tab:evasion}
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lrrrr}
+\toprule
+Config   & Combos              & ASR                 & Budget ratio         & Resistant \\
+\midrule
+whuGAIT  & \whuGAITNCombos     & \whuGAITComboASR    & \whuGAITBudgetRatio  & \whuGAITNResistant  \\
+UCI-HAR  & \uciharNCombos      & \uciharComboASR     & \uciharBudgetRatio   & \uciharNResistant   \\
+WISDM    & \wisdmNCombos       & \wisdmComboASR      & \wisdmBudgetRatio    & \wisdmNResistant    \\
+Combined & \combinedNCombos    & \combinedComboASR   & \combinedBudgetRatio & \combinedNResistant \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Budget ratios below 1.0 indicate the required perturbation falls within natural
+intra-subject gait variation. The whuGAIT ratio (\whuGAITBudgetRatio) is the
+lowest, while Combined has the highest number of resistant combos
+(\combinedNResistant vs 0 for whuGAIT), which may reflect added decision-boundary
+complexity from cross-dataset training.
+
+Fig.~\ref{fig:evasion-summary} shows ASR and budget ratio per dataset;
+Fig.~\ref{fig:evasion-eps} shows the distribution of minimum perturbation budgets
+($\varepsilon_{\min}$) across successful pairs; Fig.~\ref{fig:evasion-traintest}
+compares test-split and training-split attack outcomes.
+
+For whuGAIT, spectral analysis (NB06c) shows perturbation energy concentrated
+in the gait frequency band (0--5\,Hz) and a Mann-Whitney test on the
+high-frequency ratio gives $p{=}0.82$, indicating no detectable high-frequency
+artefact under this detector.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../../results/analysis/evasion_summary_bars.png}
+\caption{Evasion attack summary. Left: budget ratio
+         ($\bar\varepsilon_{\min}/\varepsilon_{\text{target}}$) per dataset;
+         values below 1.0 indicate the attack stays within natural gait variation.
+         Right: attack success rate (ASR) at the combo level.}
+\label{fig:evasion-summary}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../../results/analysis/evasion_eps_distribution.png}
+\caption{Distribution of minimum perturbation budgets $\varepsilon_{\min}$
+         across successfully attacked pairs. Narrower distributions indicate
+         more consistent attack difficulty across the test set.}
+\label{fig:evasion-eps}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{../../results/analysis/evasion_train_vs_test.png}
+\caption{Train-split vs test-split evasion results. Training pairs are generally
+         harder to attack (fewer epochs, different pair structure), so the
+         train-split ASR and budget ratio tend to differ from the test-split.}
+\label{fig:evasion-traintest}
+\end{figure*}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Summary Observations}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{itemize}\setlength\itemsep{1pt}
+  \item Simple-delta AUC exceeds 0.5 in all four configurations, indicating
+        some degree of memorisation by the authenticator in each case.
+  \item The D5 pair-correlation confound causes grey-box and warm-start LiRA
+        to invert for whuGAIT (AUC $< 0.5$); cold-start is less affected.
+        The effect is visible in the ROC curves (Fig.~\ref{fig:roc}).
+  \item Cold-start LiRA tends to outperform warm-start across datasets, a
+        pattern that may indicate overfitting in the surrogate training phase.
+  \item Among the delta variants, raw and mean-first perform similarly for
+        cold-start; logit-first is generally weaker.
+  \item The Combined run shows the largest authentication overfit gap
+        (\combinedAuthOverfitAcc) and moderate simple-delta AUC
+        (\combinedSimplDAUC), consistent with proportional underrepresentation
+        of UCI-HAR pairs ($\approx$8\% of the training set).
+  \item Evasion budget ratios below 0.3 across all configurations suggest the
+        PGD perturbation tends to stay within natural intra-subject variation,
+        though quick-mode ($K_\text{PGD}{=}5$) results may differ from
+        full-mode behaviour.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section*{Conditions}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\noindent
+\textbf{Hardware:} Apple M-series (MPS)\quad
+\textbf{Framework:} PyTorch 2.x\quad
+\textbf{Seed:} 42 (splits), 0 (shadow init)\quad
+\textbf{Mode:} quick (CNN 2 ep, LSTM 2 ep, $K_\text{LiRA}{=}4$, $K_\text{PGD}{=}5$)
+
+\vspace{4pt}
+\noindent\textit{LiRA results for Combined are unavailable at $K{=}4$ shadows.
+All results are expected to change under full-mode training.}
+
+\end{document}

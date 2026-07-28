@@ -2,12 +2,29 @@ import datetime
 from pathlib import Path
 
 
-def write_latex_metrics(nb_name: str, metrics: dict, output_dir: str | Path, log=None) -> None:
+def write_latex_metrics(
+    nb_name: str,
+    metrics: dict,
+    output_dir: str | Path,
+    log=None,
+    key_prefix: str = '',
+) -> None:
     """Write \\newcommand macros to latex/generated/{nb_name}_metrics.tex.
 
     The file is overwritten on every run so it always reflects the latest results.
     Keys in metrics become command names; values are written as strings.
+
+    key_prefix: when non-empty, each key is prefixed with it and its first
+    letter is capitalised (e.g. key_prefix='ucihar', key='authAUC' gives
+    command \\uciharAuthAUC).  This avoids \\newcommand conflicts when multiple
+    dataset tex files are \\input-ted in the same LaTeX document.
     """
+    if key_prefix:
+        metrics = {
+            f'{key_prefix}{k[0].upper()}{k[1:]}': v
+            for k, v in metrics.items()
+        }
+
     out_path = Path(output_dir) / f'{nb_name}_metrics.tex'
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -19,7 +36,8 @@ def write_latex_metrics(nb_name: str, metrics: dict, output_dir: str | Path, log
     ]
     for cmd, val in metrics.items():
         cmd_name = cmd.replace('_', '')
-        lines.append(f'\\newcommand{{\\{cmd_name}}}{{{val}}}')
+        lines.append(f'\\providecommand{{\\{cmd_name}}}{{}}')
+        lines.append(f'\\renewcommand{{\\{cmd_name}}}{{{val}}}')
 
     out_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 

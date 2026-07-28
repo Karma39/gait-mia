@@ -1,5 +1,5 @@
 """
-PGD evasion attack on the gait authentication pipeline — sensor level only.
+PGD evasion attack on the gait authentication pipeline, targeting sensor-level input only.
 
 Surface A: perturb raw IMU windows (B, 6, 128).
   Gradient path: x → CNN → feature maps → LSTM → FC → logits.
@@ -11,7 +11,7 @@ Perturbation norm: L2.
   variation across the full window.
 
 Attack objective (impersonation):
-  target_label=0 — push P(different) below 0.5 so the model accepts the pair.
+  target_label=0: push P(different) below 0.5 so the model accepts the pair.
 """
 
 import numpy as np
@@ -32,10 +32,10 @@ def pgd_sensor(
     PGD attack on raw sensor input (Surface A), L2 perturbation constraint.
 
     model       : AuthModel in eval mode
-    x1          : (B, 6, 128) float — probe window, the one we perturb
-    x2          : (B, 6, 128) float — reference window, fixed
-    target_label: 0 = impersonation (push P(different) below 0.5 → model accepts)
-    eps         : L2 budget — total perturbation energy per sample
+    x1          : (B, 6, 128) float, probe window (the one we perturb)
+    x2          : (B, 6, 128) float, reference window (fixed)
+    target_label: 0 = impersonation (push P(different) below 0.5 so model accepts)
+    eps         : L2 budget, total perturbation energy per sample
     alpha       : step size (eps/K recommended)
     K           : PGD iterations
 
@@ -81,9 +81,9 @@ def pgd_repr_probe(
     enrolled reference stored server-side and is not transmitted. A MITM attacker
     can intercept and modify t1 only. This function models that constraint.
 
-    model : AuthModel — only model.lstm and model.fc used
-    t1    : (B, 16, 128) probe CNN features       — perturbed
-    t2    : (B, 16, 128) reference CNN features   — fixed
+    model : AuthModel (only model.lstm and model.fc used)
+    t1    : (B, 16, 128) probe CNN features, perturbed
+    t2    : (B, 16, 128) reference CNN features, fixed
     Returns t1_adv (B, 16, 128), detached.
     """
     t2 = t2.detach()
@@ -129,9 +129,8 @@ def mean_l2(x_clean: torch.Tensor, x_adv: torch.Tensor) -> float:
 def batch_psame(model, x1: torch.Tensor, x2: torch.Tensor, batch_size: int = 256) -> np.ndarray:
     """Return P(different person) for all pairs, in batches (Surface A).
 
-    Despite the name, softmax[:, 1] = P(different person) because the dataset
-    trains with label 0 = same person, label 1 = different person.
-    Attack success is scores < 0.5 (model believes pair is same → accepts impostor).
+    The name is misleading: this returns softmax[:, 1] = P(different person), not P(same).
+    Labels are 0=same, 1=different, so attack success means score < 0.5 (model accepts impostor).
     """
     scores = []
     with torch.no_grad():
@@ -170,7 +169,7 @@ def pgd_sensor_variable_eps(
     """
     PGD on raw sensor input with per-sample L2 budget.
 
-    eps_arr : (B,) tensor — individual L2 budget per sample
+    eps_arr : (B,) tensor, individual L2 budget per sample
     alpha   : eps_arr / K per sample (one step = full budget / K)
     Used during batched binary search where each pair has a different bracket midpoint.
     """

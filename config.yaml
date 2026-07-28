@@ -1,0 +1,76 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# config.yaml — central parameter file for the gait MIA pipeline
+#
+# All hyperparameters that notebooks read from this file are injected by
+# run_pipeline.py at execution time. The marker  # <<< RUNNER INJECTS THIS
+# in a notebook cell tells the runner which line to replace.
+#
+# Quick smoke-test mode: run_pipeline.py --quick
+#   Uses the values in the `quick:` block below; full values are the default.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Active dataset ────────────────────────────────────────────────────────────
+# Controls which data and artifact directories all notebooks use.
+# Options: whuGAIT | ucihar | wisdm | combined
+#
+# Dataset notes:
+#   whuGAIT  : 118 subjects, 50 Hz, step-segmented,  128 samples/window (2.56 s)
+#   ucihar   :  30 subjects, 50 Hz, pre-segmented,   128 samples/window (2.56 s)
+#   wisdm    :  51 subjects, 20 Hz, sliding window,  128 samples/window (6.4 s), walking only
+#   combined :  uses whuGAIT CNN encoder; ucihar + wisdm subjects as test set
+dataset: whuGAIT
+
+# ── Cross-dataset encoder ─────────────────────────────────────────────────────
+# null = within-dataset mode (train CNN on the same dataset)
+# 'whuGAIT' = reuse the whuGAIT CNN encoder (must be trained first)
+encoder_dataset: null
+
+# ── CNN encoder (NB02) ────────────────────────────────────────────────────────
+cnn:
+  epochs: 25          # training epochs; paper trains ~25–50
+  batch_size: 64      # samples per gradient step
+  lr: 0.001           # Adam learning rate
+  weight_decay: 0.0   # L2 regularisation (0 = disabled)
+  patience: 5         # early-stopping patience (epochs without test improvement)
+
+# ── Authenticator LSTM (NB03) ─────────────────────────────────────────────────
+auth:
+  epochs: 10          # training epochs (LSTM only; CNN is frozen)
+  batch_size: 256     # pairs per gradient step
+  lr: 0.0025          # Adam learning rate
+  weight_decay: 0.0015
+  dropout: 0.3        # dropout applied inside the LSTM
+  patience: 3         # early-stopping patience
+
+# ── MIA signal (NB04 / NB05a) ────────────────────────────────────────────────
+mia:
+  batch_size: 512     # inference batch size for scoring pairs
+
+# ── LiRA shadow models (NB05b / NB05c) ───────────────────────────────────────
+lira:
+  k_shadows: 32       # number of shadow LSTMs trained per variant
+  epochs: 3           # fine-tuning epochs per shadow model
+  surrogate_epochs: 5 # epochs for the warm-start surrogate (NB05c only)
+  batch_size: 512     # training batch size for shadow models
+
+# ── PGD evasion attack (NB06a / NB06b) ───────────────────────────────────────
+pgd:
+  k_pgd: 20                  # PGD steps per ε evaluation
+  n_bisect: 6                # binary-search refinement steps
+  batch_size: 512            # pairs per PGD forward/backward pass
+  n_combos_train_sample: 500 # training-split combos to attack (null = all ~4 k)
+  seed_train_sample: 42      # RNG seed for the training-split subsample
+
+# ── Quick / smoke-test mode (run_pipeline.py --quick) ────────────────────────
+# Overrides the values above for a fast end-to-end check (~10–20 min on CPU).
+# Results are not meaningful for the thesis — only for verifying the pipeline
+# runs without errors on a new machine or after a refactor.
+quick:
+  cnn_epochs: 2
+  auth_epochs: 2
+  lira_k_shadows: 4
+  lira_epochs: 1
+  lira_surrogate_epochs: 1
+  pgd_k_pgd: 5
+  pgd_n_bisect: 2
+  pgd_n_combos_train_sample: 20

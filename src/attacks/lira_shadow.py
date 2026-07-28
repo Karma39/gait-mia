@@ -1,5 +1,5 @@
 """
-LiRA shadow model training and evaluation — mechanical implementation.
+LiRA shadow model training and evaluation. Mechanical implementation only:
 
 Conceptual explanations (three delta variants, LiRA scoring formula, threat model
 discussion) live in the notebooks that call these functions, not here.
@@ -26,14 +26,16 @@ from torch.utils.data import DataLoader, TensorDataset
 class ShadowLSTM(nn.Module):
     """LSTM+FC shadow model operating on precomputed CNN feature maps (B, 32, 128)."""
 
-    def __init__(self):
+    def __init__(self, dropout: float = 0.0):
         super().__init__()
-        self.lstm = nn.LSTM(input_size=128, hidden_size=64, num_layers=2, batch_first=True)
+        self.lstm = nn.LSTM(input_size=128, hidden_size=64, num_layers=2,
+                            batch_first=True, dropout=dropout)
+        self.drop = nn.Dropout(p=dropout)
         self.fc   = nn.Linear(64, 2)
 
     def forward(self, feats: torch.Tensor) -> torch.Tensor:
         out, _ = self.lstm(feats)
-        return self.fc(out[:, -1, :])
+        return self.fc(self.drop(out[:, -1, :]))
 
     def similarity(self, feats: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
@@ -47,22 +49,37 @@ def logit_fn(p: np.ndarray) -> np.ndarray:
     return np.log(p / (1 - p))
 
 
-def all_deltas(same_scores, diff_scores):
+def all_deltas(impostor_scores, genuine_scores):
     """
     Three delta variants from per-pair P(different person) scores (softmax[:, 1]).
+
+    impostor_scores: P(different) for y=1 (different-person) pairs — HIGH for a good model
+    genuine_scores:  P(different) for y=0 (same-person) pairs    — LOW for a good model
+
+    delta = impostor_scores.mean() - genuine_scores.mean() (positive = discriminative)
+
     Returns (raw, logit_first, mean_first) or (None, None, None) if input is empty.
     Formulas are documented in notebook 05a.
     """
-    if same_scores is None or len(same_scores) == 0 or len(diff_scores) == 0:
+    if impostor_scores is None or len(impostor_scores) == 0 or len(genuine_scores) == 0:
         return None, None, None
-    raw         = float(same_scores.mean() - diff_scores.mean())
-    logit_first = float(logit_fn(same_scores).mean() - logit_fn(diff_scores).mean())
-    mean_first  = float(logit_fn(same_scores.mean()) - logit_fn(diff_scores.mean()))
+    raw         = float(impostor_scores.mean() - genuine_scores.mean())
+    logit_first = float(logit_fn(impostor_scores).mean() - logit_fn(genuine_scores).mean())
+    mean_first  = float(logit_fn(impostor_scores.mean()) - logit_fn(genuine_scores.mean()))
     return raw, logit_first, mean_first
 
 
 def compute_subject_scores(model, feats, y_labels, mask, batch_size=512):
-    """Run shadow model on one subject's pairs → (same_scores, diff_scores) as float32 arrays."""
+    """
+    Run shadow model on one subject's pairs.
+
+    Returns (impostor_scores, genuine_scores) as float32 arrays, where:
+      impostor_scores: P(different person) for y=1 pairs (different-person / impostor pairs)
+      genuine_scores:  P(different person) for y=0 pairs (same-person / genuine pairs)
+
+    Label convention: y=0 = same person, y=1 = different person.
+    softmax[:, 1] = P(different person); high for impostors, low for genuine pairs.
+    """
     fm = feats[mask].float()
     ym = y_labels[mask]
     if fm.shape[0] == 0:
@@ -73,9 +90,9 @@ def compute_subject_scores(model, feats, y_labels, mask, batch_size=512):
         for s in range(0, len(fm), batch_size):
             pair_scores.append(model.similarity(fm[s:s + batch_size]).numpy())
     pair_scores = np.concatenate(pair_scores)
-    same = pair_scores[ym == 1]  # P(different person) for y=1 (different-labeled) pairs — HIGH
-    diff = pair_scores[ym == 0]  # P(different person) for y=0 (same-labeled) pairs — LOW
-    return (same, diff) if len(same) > 0 and len(diff) > 0 else (None, None)
+    impostor_sc = pair_scores[ym == 1]  # y=1 = different-person pairs: P(different) is HIGH
+    genuine_sc  = pair_scores[ym == 0]  # y=0 = same-person pairs:      P(different) is LOW
+    return (impostor_sc, genuine_sc) if len(impostor_sc) > 0 and len(genuine_sc) > 0 else (None, None)
 
 
 # ── Shadow training ───────────────────────────────────────────────────────────
@@ -92,6 +109,7 @@ def train_shadow_models(
     batch_size=512,
     device='cpu',
     log=None,
+    dropout: float = 0.0,
 ):
     """
     Train K shadow LSTMs and collect OUT-of-bag delta scores for every subject.
@@ -112,9 +130,9 @@ def train_shadow_models(
                        to prevent an OUT subject's gait from leaking into shadow training as x2.
 
     The three threat models compared in NB05c (all use split_mode='member_aware'):
-      grey-box   : init_mode='target'    — real model weights
-      BB warm    : init_mode='warm_base' — surrogate weights
-      BB cold    : init_mode='random'    — random init
+      grey-box   : init_mode='target'    (real target model weights)
+      BB warm    : init_mode='warm_base' (attacker's own surrogate weights)
+      BB cold    : init_mode='random'    (random init)
 
     target_state: dict with keys 'lstm' and 'fc' (state_dicts).
                   Required for init_mode='target' or 'warm_base'.
@@ -149,7 +167,7 @@ def train_shadow_models(
         out_raw = defaultdict(list)
         out_lf  = defaultdict(list)
         out_mf  = defaultdict(list)
-        log.info('No checkpoint found — starting from scratch.')
+        log.info('No checkpoint found, starting from scratch.')
 
     def _save(k_done):
         if ckpt_path is None:
@@ -182,12 +200,12 @@ def train_shadow_models(
             included           = set(int(x) for x in subject_draw)
             out_subjects       = set(member_list) - included
             included_pair_mask = np.isin(pair_subjects, list(included)) | (pair_subjects == -1)
-            # Exclude pairs where x2 (reference) belongs to an OUT subject — prevents their
+            # Exclude pairs where x2 (reference) belongs to an OUT subject: prevents their
             # gait from leaking into shadow training through the reference window.
             if pair_subjects_w2 is not None:
                 included_pair_mask = included_pair_mask & ~np.isin(pair_subjects_w2, list(out_subjects))
         else:  # 'blind': attacker does not know membership labels
-            # out_subjects is a random designation used only for scoring — NOT linked to training data
+            # out_subjects is a random designation used only for scoring, not linked to training data
             out_subjects       = set(int(x) for x in subject_draw)
             included_pair_mask = pair_draw < INCL_RATE
 
@@ -199,7 +217,7 @@ def train_shadow_models(
             batch_size=batch_size, shuffle=True, num_workers=0,
         )
 
-        shadow = ShadowLSTM().to(device)
+        shadow = ShadowLSTM(dropout=dropout).to(device)
         if init_mode in ('target', 'warm_base') and target_state is not None:
             shadow.lstm.load_state_dict(target_state['lstm'])
             shadow.fc.load_state_dict(target_state['fc'])
@@ -217,10 +235,10 @@ def train_shadow_models(
 
         # OUT members: scored on train pairs
         for sid in out_subjects:
-            same_sc, diff_sc = compute_subject_scores(
+            impostor_sc, genuine_sc = compute_subject_scores(
                 shadow, all_feats, y_tr, pair_subjects == sid, batch_size
             )
-            raw, lf, mf = all_deltas(same_sc, diff_sc)
+            raw, lf, mf = all_deltas(impostor_sc, genuine_sc)
             if raw is not None:
                 out_raw[sid].append(raw)
                 out_lf[sid].append(lf)
@@ -228,10 +246,10 @@ def train_shadow_models(
 
         # Non-members: always OUT, scored on test pairs
         for sid in nonmember_list:
-            same_sc, diff_sc = compute_subject_scores(
+            impostor_sc, genuine_sc = compute_subject_scores(
                 shadow, te_feats, y_te, te_pair_subjects == sid, batch_size
             )
-            raw, lf, mf = all_deltas(same_sc, diff_sc)
+            raw, lf, mf = all_deltas(impostor_sc, genuine_sc)
             if raw is not None:
                 out_raw[sid].append(raw)
                 out_lf[sid].append(lf)
@@ -280,8 +298,11 @@ def lira_eval(out_dict, target_dict, member_list, nonmember_list):
         null_std  = float(np.std(shadow_deltas, ddof=1)) + 1e-6
         lira_scores[sid] = float(sp_norm.cdf(target_dict[sid], null_mean, null_std))
 
-    m_arr  = np.array([(sid, lira_scores[sid]) for sid in member_list    if sid in lira_scores])
-    nm_arr = np.array([(sid, lira_scores[sid]) for sid in nonmember_list if sid in lira_scores])
+    m_arr  = np.array([(sid, lira_scores[sid]) for sid in member_list    if sid in lira_scores], dtype=float).reshape(-1, 2)
+    nm_arr = np.array([(sid, lira_scores[sid]) for sid in nonmember_list if sid in lira_scores], dtype=float).reshape(-1, 2)
+    if len(m_arr) == 0 or len(nm_arr) == 0:
+        # Not enough subjects with valid OUT estimates (K too small for min-count threshold)
+        return (np.array([0., 1.]), np.array([0., 1.]), 0.5, 0.5, 0.5, lira_scores, m_arr, nm_arr)
     labels     = np.concatenate([np.ones(len(m_arr)), np.zeros(len(nm_arr))])
     scores_arr = np.concatenate([m_arr[:, 1], nm_arr[:, 1]])
     fpr_arr, tpr_arr, _ = roc_curve(labels, scores_arr)

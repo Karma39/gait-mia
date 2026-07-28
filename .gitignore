@@ -1,16 +1,41 @@
+# ── Raw data and large binaries ───────────────────────────────────────────────
 data/
-logs/
 embeddings/
 checkpoints/
 documentation/
+
+# ── Pipeline-generated artifacts (1.1 GB, regeneratable via run_pipeline.py) ──
+artifacts/
+
+# ── Executed notebooks (regeneratable) ────────────────────────────────────────
+executed/
+
+# ── Runtime logs ──────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Generated figures (regeneratable by analysis notebooks) ───────────────────
+results/
+
+# ── LaTeX build artifacts (all subdirectories) ────────────────────────────────
+latex/generated/
+latex/**/*.aux
+latex/**/*.fdb_latexmk
+latex/**/*.fls
+latex/**/*.log
+latex/**/*.out
+latex/**/*.pdf
+latex/**/*.synctex.gz
+
+# ── Python cache ──────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
-.DS_Store
+*.pyo
 .ipynb_checkpoints/
-latex/generated/
-latex/*.aux
-latex/*.fdb_latexmk
-latex/*.fls
-latex/*.log
-latex/*.out
-latex/*.synctex.gz
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+
+# ── Auto-generated review and result notes ────────────────────────────────────
+REVIEW.md
+pipeline_results_*.md

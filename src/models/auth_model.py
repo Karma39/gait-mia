@@ -20,18 +20,21 @@ class AuthModel(nn.Module):
       softmax[:, 1] = P(different person); attack success = softmax[:, 1] < 0.5
     """
 
-    def __init__(self, cnn_encoder: GaitCNN):
+    def __init__(self, cnn_encoder: GaitCNN, dropout: float = 0.0):
         super().__init__()
         self.cnn  = cnn_encoder
 
         # n_hidden=64, n_layers=2 matches the professor's config
+        # dropout applies between LSTM layers (ignored when num_layers=1)
         self.lstm = nn.LSTM(
             input_size=128,
             hidden_size=64,
             num_layers=2,
             batch_first=True,
+            dropout=dropout,
         )
-        self.fc = nn.Linear(64, 2)
+        self.drop = nn.Dropout(p=dropout)
+        self.fc   = nn.Linear(64, 2)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
         """Return logits (B, 2) for [same person, different person].
@@ -43,10 +46,10 @@ class AuthModel(nn.Module):
         t2 = self.cnn.get_feature_maps(x2)       # (B, 16, 128)
         ct = torch.cat([t1, t2], dim=1)          # (B, 32, 128)
         out, _ = self.lstm(ct)                   # (B, 32, 64)
-        return self.fc(out[:, -1, :])            # (B, 2)
+        return self.fc(self.drop(out[:, -1, :]))            # (B, 2)
 
     def similarity(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
         """Return P(different person) ∈ [0, 1] for each pair, no grad."""
         with torch.no_grad():
             logits = self.forward(x1, x2)
-            return torch.softmax(logits, dim=1)[:, 1]   # P(different person)
+            return torch.softmax(logits, dim=1)[:, 1]
