@@ -77,18 +77,6 @@ RUNS = {
         'encoder_dataset': 'whuGAIT',
         'notebooks':       EXPLORE['combined'] + PIPELINE_CORE + EVASION,
     },
-    # ── Cross-dataset: whuGAIT encoder → target ──────────────────────────────
-    # Prerequisite: 'whuGAIT' run must be complete (CNN checkpoint must exist).
-    'cross_ucihar': {
-        'dataset':         'ucihar',
-        'encoder_dataset': 'whuGAIT',
-        'notebooks':       PIPELINE_CORE + EVASION,
-    },
-    'cross_wisdm': {
-        'dataset':         'wisdm',
-        'encoder_dataset': 'whuGAIT',
-        'notebooks':       PIPELINE_CORE + EVASION,
-    },
 }
 
 # ── Config loading ────────────────────────────────────────────────────────────
@@ -427,6 +415,7 @@ ANALYSIS_NOTEBOOKS = [
     'analysis/compare_models.ipynb',
     'analysis/compare_mia.ipynb',
     'analysis/compare_evasion.ipynb',
+    'analysis/compare_combined.ipynb',
 ]
 
 def run_analysis(dry_run: bool = False, timeout: int = 600) -> bool:

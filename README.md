@@ -18,10 +18,6 @@ python run_pipeline.py ucihar
 python run_pipeline.py wisdm
 python run_pipeline.py combined        # uses frozen whuGAIT CNN encoder
 
-# Cross-encoder runs (whuGAIT encoder, different auth dataset)
-python run_pipeline.py cross_ucihar
-python run_pipeline.py cross_wisdm
-
 # Run all configured datasets in sequence
 python run_pipeline.py
 
@@ -51,9 +47,10 @@ After the pipeline notebooks finish, `run_pipeline.py` always executes the
 three cross-dataset analysis notebooks:
 
 ```
-notebooks/analysis/compare_models.ipynb
-notebooks/analysis/compare_mia.ipynb
-notebooks/analysis/compare_evasion.ipynb
+notebooks/analysis/compare_models.ipynb    # cross-dataset accuracy and overfitting
+notebooks/analysis/compare_mia.ipynb       # cross-dataset MIA signal and LiRA
+notebooks/analysis/compare_evasion.ipynb   # cross-dataset evasion results
+notebooks/analysis/compare_combined.ipynb  # deep dive on the combined run
 ```
 
 These aggregate results from all datasets that have completed artifacts,
@@ -198,8 +195,6 @@ documentation/               reference papers and original TF1 implementation
 | `ucihar` | UCI-HAR | within-dataset | 6-class activity |
 | `wisdm` | WISDM | within-dataset | 51-class activity |
 | `combined` | all three | frozen whuGAIT | LSTM retrained cross-dataset |
-| `cross_ucihar` | UCI-HAR | frozen whuGAIT | transfer only |
-| `cross_wisdm` | WISDM | frozen whuGAIT | transfer only |
 
 ---
 
