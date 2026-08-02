@@ -1,0 +1,179 @@
+\documentclass[12pt, a4paper]{report}
+
+% ── packages ──────────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{siunitx}
+\usepackage{subcaption}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage[acronym]{glossaries}
+
+\sisetup{detect-weight=true, mode=text}
+\onehalfspacing
+
+% ── figure paths ──────────────────────────────────────────────────────────────
+\graphicspath{{../../results/}}
+
+% ── convenience ───────────────────────────────────────────────────────────────
+\newcommand{\tbd}{\textcolor{gray}{--}}
+\newcommand{\na}{\textcolor{gray}{n/a}}
+
+% ── graceful fallbacks for auto-generated metrics ─────────────────────────────
+\providecommand{\whuGAITCnnTestAcc}{\tbd}
+\providecommand{\whuGAITAuthTestAUC}{\tbd}
+\providecommand{\whuGAITSimplDAUC}{\tbd}
+\providecommand{\whuGAITComboASR}{\tbd}
+\providecommand{\whuGAITBudgetRatio}{\tbd}
+\providecommand{\uciharCnnTestAcc}{\tbd}
+\providecommand{\uciharAuthTestAUC}{\tbd}
+\providecommand{\uciharSimplDAUC}{\tbd}
+\providecommand{\uciharComboASR}{\tbd}
+\providecommand{\wisdmCnnTestAcc}{\tbd}
+\providecommand{\wisdmAuthTestAUC}{\tbd}
+\providecommand{\wisdmSimplDAUC}{\tbd}
+\providecommand{\wisdmComboASR}{\tbd}
+\providecommand{\combinedAuthTestAUC}{\tbd}
+\providecommand{\combinedSimplDAUC}{\tbd}
+\providecommand{\signalAuthModelAUCB}{\tbd}
+\providecommand{\signalAuthModelAUCA}{\tbd}
+\providecommand{\signalAuthModelAUCC}{\tbd}
+\providecommand{\signalMiaAUCBvsC}{\tbd}
+\providecommand{\signalMiaAUCAvsC}{\tbd}
+
+% ── auto-generated metrics ────────────────────────────────────────────────────
+\IfFileExists{../generated/compare_models_whuGAIT_metrics.tex}
+  {\input{../generated/compare_models_whuGAIT_metrics}}{}
+\IfFileExists{../generated/compare_models_ucihar_metrics.tex}
+  {\input{../generated/compare_models_ucihar_metrics}}{}
+\IfFileExists{../generated/compare_models_wisdm_metrics.tex}
+  {\input{../generated/compare_models_wisdm_metrics}}{}
+\IfFileExists{../generated/compare_models_combined_metrics.tex}
+  {\input{../generated/compare_models_combined_metrics}}{}
+\IfFileExists{../generated/compare_mia_whuGAIT_metrics.tex}
+  {\input{../generated/compare_mia_whuGAIT_metrics}}{}
+\IfFileExists{../generated/compare_mia_ucihar_metrics.tex}
+  {\input{../generated/compare_mia_ucihar_metrics}}{}
+\IfFileExists{../generated/compare_mia_wisdm_metrics.tex}
+  {\input{../generated/compare_mia_wisdm_metrics}}{}
+\IfFileExists{../generated/compare_mia_combined_metrics.tex}
+  {\input{../generated/compare_mia_combined_metrics}}{}
+\IfFileExists{../generated/compare_evasion_whuGAIT_metrics.tex}
+  {\input{../generated/compare_evasion_whuGAIT_metrics}}{}
+\IfFileExists{../generated/compare_evasion_ucihar_metrics.tex}
+  {\input{../generated/compare_evasion_ucihar_metrics}}{}
+\IfFileExists{../generated/compare_evasion_wisdm_metrics.tex}
+  {\input{../generated/compare_evasion_wisdm_metrics}}{}
+\IfFileExists{../generated/compare_evasion_combined_metrics.tex}
+  {\input{../generated/compare_evasion_combined_metrics}}{}
+\IfFileExists{../generated/signal_disentanglement_metrics.tex}
+  {\input{../generated/signal_disentanglement_metrics}}{}
+
+% ── metadata ──────────────────────────────────────────────────────────────────
+\title{Membership Inference and Evasion Attacks\\on Gait-Based Authentication}
+\author{Matteo Campagnaro}
+\date{\today}
+
+% ── header / footer ───────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+% ══════════════════════════════════════════════════════════════════════════════
+
+% ── title page ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Large University of Padova\par}
+  {\large Department of Information Engineering\par}
+  \vspace{1.5cm}
+  {\LARGE\bfseries Membership Inference and Evasion Attacks\\[6pt]
+   on Gait-Based Authentication\par}
+  \vspace{2cm}
+  {\large Master's Thesis in Cybersecurity\par}
+  \vspace{2cm}
+  \begin{tabular}{ll}
+    \textbf{Author:}     & Matteo Campagnaro \\[6pt]
+    \textbf{Supervisor:} & Prof.\ Simone Milani \\
+  \end{tabular}
+  \vfill
+  {\large Academic Year 2025/2026\par}
+\end{titlepage}
+
+\pagenumbering{roman}
+
+% ── abstract ──────────────────────────────────────────────────────────────────
+\begin{abstract}
+Gait-based authentication uses inertial sensor recordings collected during
+ordinary device use to verify a user's identity, relying on the stability and
+person-specificity of natural walking patterns. Deep learning models trained for
+this task fit their training subjects closely enough to produce accurate
+authentication decisions, but that same fitting introduces a privacy
+vulnerability: the model's output behaviour may reveal which subjects were
+present in the training set.
+
+This thesis investigates membership inference attacks (MIA) on a gait
+authentication pipeline consisting of a CNN encoder trained for subject
+identification and a pairwise LSTM authentication head
+that scores whether two gait windows come from the same person. Four attack variants are
+evaluated across three inertial datasets (whuGAIT, UCI-HAR, WISDM) and a
+cross-dataset configuration: a simple score-based baseline, a grey-box
+likelihood ratio attack initialised from the target model weights, a warm-start
+black-box variant, and a cold-start black-box variant. To determine how much of
+the observed membership signal originates in the CNN encoder versus the LSTM
+authentication head, a signal disentanglement experiment assigns subjects to
+three non-overlapping groups so that the two components are trained on disjoint
+populations.
+
+Additionally, a projected gradient descent (PGD) evasion attack is evaluated on all
+configurations, measuring the minimum perturbation budget required for a
+successful impersonation relative to natural intra-subject gait variation.
+
+Results show that a membership signal above chance is detectable across
+configurations, with the authenticator and CNN encoder contributing comparable
+amounts to the signal. Cold-start LiRA is the most consistent attack variant
+across datasets. Evasion perturbations that succeed tend to stay within the
+natural variation budget, raising practical concerns about the robustness of the
+system.
+
+\bigskip
+\noindent\textit{Keywords:} gait authentication, membership inference attack,
+LiRA, adversarial evasion, inertial sensors, privacy.
+\end{abstract}
+
+% ── front matter ──────────────────────────────────────────────────────────────
+\tableofcontents
+\listoffigures
+\listoftables
+
+\cleardoublepage
+\pagenumbering{arabic}
+
+% ── chapters ──────────────────────────────────────────────────────────────────
+\input{chapters/01_introduction}
+\input{chapters/02_background}
+\input{chapters/03_related_work}
+\input{chapters/04_system}
+\input{chapters/05_mia}
+\input{chapters/06_signal}
+\input{chapters/07_evasion}
+\input{chapters/08_conclusions}
+
+% ── bibliography ──────────────────────────────────────────────────────────────
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

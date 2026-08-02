@@ -1,0 +1,284 @@
+\chapter{Background}
+\label{ch:background}
+
+This chapter introduces the concepts that will lay the foundation for the rest of the thesis. Section~\ref{sec:bg_gait} describes gait signals and how they are
+captured with inertial sensors. Section~\ref{sec:bg_auth} explains the
+distinction between identification and authentication and how deep learning
+architectures are adapted for the authentication task.
+Section~\ref{sec:bg_privacy} covers the connection between model memorisation
+and privacy risk. Section~\ref{sec:bg_mia} formalises membership inference
+attacks and describes the likelihood ratio formulation used in this work.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Gait Recognition}
+\label{sec:bg_gait}
+
+Gait recognition is the problem of identifying or verifying a person from the
+way they walk. It can be approached from video, using the silhouette or
+skeleton of a walking figure, or from inertial sensors attached to the body or
+carried in a pocket. Sensor-based approaches are the more practical choice for
+mobile authentication because the hardware is already present in any smartphone,
+the measurement is passive and continuous, and no dedicated
+infrastructures are required.
+
+\subsection{Inertial Measurement Units and Gait Signals}
+\label{ssec:bg_imu}
+
+A modern smartphone contains at least a three-axis accelerometer and a
+three-axis gyroscope, referred to as an inertial measurement unit
+(IMU). The accelerometer measures specific force along each axis: when the
+phone is stationary on a table it reads approximately $9.8\,\text{m/s}^2$
+along the gravity axis, and when carried during walking it reads the
+superposition of gravitational acceleration and the dynamic accelerations
+produced by each step. The gyroscope measures angular velocity, which captures
+the rotational motion of the device as the carrier shifts weight and swings
+their arms.
+
+Both sensors produce a continuous time series sampled at a fixed rate, typically
+between 50\,Hz and 200\,Hz in consumer devices. The raw signal has a periodic
+structure: each step produces a roughly repeatable pattern of peaks and troughs
+whose shape, amplitude, and timing depend on the individual's body size, mass
+distribution, stride length, and movement habits. This inter-subject variability
+is the source of the biometric signal; the intra-subject stability over sessions
+is what makes authentication feasible.
+
+The phone's orientation and position relative to the body is not fixed, which is a practical complication. A phone carried in a trouser pocket sits differently from one held in the hand, and both differ from one lying in a bag. Several approaches address this: some datasets are collected with the device in a standardised position, some preprocessing pipelines project the signal onto a gravity-aligned frame, and some models are trained to be invariant to orientation through data augmentation. The datasets used in this thesis take different positions on this question, which is discussed in Chapter~\ref{ch:system}.
+
+\subsection{Window Segmentation and Feature Representation}
+\label{ssec:bg_windows}
+
+Because gait is a periodic signal, the natural unit of analysis is a window
+containing one or more complete gait cycles. A gait cycle is the interval
+between two successive heel strikes of the same foot, lasting roughly one to
+two seconds at a normal walking pace. Practical systems rarely segment by gait
+cycle explicitly; instead they use fixed-length overlapping windows, which
+avoids the need for reliable step detection and makes the windowing procedure
+deterministic.
+
+A window of length $T$ samples from $C$ sensor channels produces a matrix
+$\mathbf{X} \in \mathbb{R}^{C \times T}$, which can be treated as a
+multi-channel time series and fed directly into a convolutional or recurrent
+network. Earlier approaches extracted handcrafted features from each window,
+such as mean, variance, zero-crossing rate, and frequency-domain coefficients,
+and then trained a classifier on the resulting feature vectors. Deep learning
+pipelines learns a mapping from the raw window to a compact representation, with the representation shaped by the training objective.
+
+The window length involves a trade-off. Longer windows capture more gait cycles and therefore more person-specific structure, improving discriminability between subjects. Shorter windows are more likely to be collected in practice, because any break in walking resets the signal and an authentication decision may be needed before a full long window is available. The datasets examined in this work use windows ranging from around two to five seconds, reflecting different positions on this trade-off.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Gait-Based Authentication}
+\label{sec:bg_auth}
+
+\subsection{Identification vs Authentication}
+\label{ssec:bg_id_vs_auth}
+
+Two related but distinct tasks arise in biometric systems: identification and
+authentication. Identification is a one-to-many problem: given a measurement, determine which of $N$ known individuals it belongs to. The output is a class label, and the difficulty of the problem grows with $N$. This is the task used to train the CNN encoder in this work; training as a classifier with a softmax output over $N$ subject classes provides a supervision signal that encourages the learned representations to be discriminative across subjects.
+
+Authentication is a one-to-one verification problem: given a measurement and a claimed identity, decide whether it matches the claim. The output is a binary accept or reject decision, and the difficulty does not depend on the total number of enrolled subjects in the same way. The device has one registered owner, and the question is whether the current user is that owner.
+
+The two tasks use different metrics. Identification is evaluated by classification accuracy: the fraction of windows for which the predicted subject matches the true label. Authentication is evaluated by the false acceptance rate (FAR) and false rejection rate (FRR); the area under the (FAR-FRR) ROC curve (AUC) summarises overall separability and is the primary metric used throughout this thesis.
+
+\subsection{Siamese and Contrastive Architectures}
+\label{ssec:bg_siamese}
+
+A natural architecture for authentication is a Siamese network~\cite{bromley1994signature}:
+two copies of the same feature extractor, sharing weights, process the query
+and the reference signal separately, and a comparison module produces a
+similarity or distance score from the two resulting embeddings. If the score
+exceeds a threshold, the query is accepted.
+
+The key property of this architecture is that it does not require retraining
+when a new subject is enrolled. The feature extractor is trained to produce
+embeddings where same-subject pairs are close and different-subject pairs are
+far apart, and any new subject can be enrolled simply by storing their reference
+embedding. This is in contrast to a closed-set classifier, which requires
+retraining to add a new class.
+
+Training a Siamese network requires pairs and a loss that shapes the embedding
+space. Common choices are contrastive loss~\cite{hadsell2006dimensionality} and
+triplet loss~\cite{schroff2015facenet}; this thesis uses a simpler alternative
+that treats each pair as a binary classification problem, with the model trained
+with cross-entropy loss on the pair label and the output score interpreted as
+$P(\text{different person} \mid \mathbf{x}_1, \mathbf{x}_2) \in [0, 1]$.
+
+The system evaluated in this thesis uses this last approach. The CNN architecture
+from Zou et al.~\cite{zou2020deep}, trained on the whuGAIT dataset, serves as
+the shared feature extractor. The CNN is first trained as a subject identifier
+on a set of training subjects. The authentication head, an LSTM followed by a
+fully connected layer, is then trained on pairs of CNN-encoded windows with
+cross-entropy loss. The score used for authentication decisions is
+$P(\text{different person} \mid \mathbf{x}_1, \mathbf{x}_2)$. The CNN encoder
+is kept frozen during authentication training, which keeps the memorisation
+contributions of the two components separated and is discussed further in
+Chapter~\ref{ch:signal}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Privacy in Machine Learning}
+\label{sec:bg_privacy}
+
+\subsection{Memorisation and Generalisation}
+\label{ssec:bg_memorisation}
+
+Memorisation is distinct from overfitting: a model memorises a training example
+if its output on that input depends on the example's presence in the training
+set, regardless of whether the model generalises well on average.
+Feldman~\cite{feldman2020does} showed that some memorisation of long-tail
+examples is in fact necessary for optimal generalisation. The privacy implication
+is that memorisation creates an exploitable asymmetry: if the model's behaviour
+differs between training and non-training inputs, an attacker who can query the
+model may detect that difference.
+
+In gait authentication this asymmetry can manifest at multiple levels: individual pair scores, per-window confidence, or aggregated per-subject statistics. This thesis focuses on the subject-level signal, using the gap between training and non-training subjects as the membership signal and establishing a baseline attack on an unprotected system, without evaluating privacy-hardened mitigations.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Membership Inference Attacks}
+\label{sec:bg_mia}
+
+\subsection{Threat Model}
+\label{ssec:bg_threat}
+
+A membership inference attack targets a trained model $f_\theta$ and asks,
+for a given data point $x$ and label $y$: was $(x, y)$ in the training set
+$\mathcal{D}_\text{train}$ used to produce $\theta$? The attacker's goal is to
+build a binary classifier $\mathcal{A}$ such that $\mathcal{A}(x, y, f_\theta)
+= 1$ indicates membership and $0$ indicates non-membership.
+
+The attacker's capabilities vary along two dimensions. The first is access to
+the model: a white-box attacker can read the model weights and gradients
+directly; a grey-box attacker can query the model and observe its output
+probabilities but knows the architecture and possibly the training procedure;
+a black-box attacker can only query the model and observe its outputs, with no
+knowledge of the weights or training procedure. The second dimension is
+knowledge of the training data distribution: the attacker may have access to
+data from the same distribution (shadow data) without knowing the exact training
+set.
+
+For gait authentication, the relevant queries are pairs of gait windows. The
+model's output for a pair $(\mathbf{x}_1, \mathbf{x}_2)$ is a scalar
+$p = P(\text{different person} \mid \mathbf{x}_1, \mathbf{x}_2) \in [0, 1]$.
+The attacker has access to a set of same-person and different-person pairs for
+a target subject $s$ and observes the model's score distribution over those
+pairs. The membership question is then: was subject $s$'s data in the
+authentication model's training set?
+
+This thesis evaluates attacks under three threat models. The grey-box attacker
+knows the model architecture and initialises shadow models from a copy of the
+target weights, which corresponds to an attacker who has obtained the model
+checkpoint through leakage or reverse engineering. The warm-start black-box
+attacker trains a surrogate model independently and uses its weights for shadow
+model initialisation, corresponding to an attacker with knowledge of the
+architecture and training procedure but not the weights. The cold-start
+black-box attacker uses random initialisation, corresponding to the most
+restrictive assumption in which the attacker knows only the architecture.
+
+\subsection{Shadow Model Approaches}
+\label{ssec:bg_shadow}
+
+The shadow model technique, introduced by Shokri et al.~\cite{shokri2017membership},
+is the foundation of most subsequent MIA work. The idea is to train several
+models on datasets drawn from the same distribution as the target model's
+training set, with known membership labels: for each shadow model, the attacker
+knows which examples were in its training set and which were held out. The
+shadow models produce output distributions for both member and non-member
+examples, and an attack classifier is trained on those distributions to
+distinguish the two cases. At test time the same attack classifier is applied
+to the target model's output on the query example.
+
+The effectiveness of this approach depends on the shadow models approximating
+the target model's behaviour on members and non-members. If the target model
+was trained differently from the shadow models, or on a substantially different
+data distribution, the shadow distributions will not match and the attack will
+underperform.
+
+A cleaner formulation replaces the learned attack classifier with a direct
+statistical test. For a given example, the attacker collects scores from many
+shadow models: scores from shadow models that included the example in their
+training set (IN scores) and scores from shadow models that excluded it (OUT
+scores). These two sets of scores approximate the conditional distributions
+$P(\text{score} \mid \text{member})$ and $P(\text{score} \mid
+\text{non-member})$. The membership decision is made by comparing the target
+model's score on the example against these two distributions.
+
+\subsection{Likelihood Ratio Attacks (LiRA)}
+\label{ssec:bg_lira}
+
+Carlini et al.~\cite{carlini2022membership} formalised this statistical
+formulation as a likelihood ratio attack (LiRA). For a target example $z =
+(x, y)$ and a target model $f_\theta$, let $\phi(z, \theta)$ be the
+per-example score (e.g. the model's loss or confidence on $z$). The attacker
+trains $K$ shadow models $\theta_1^{\text{in}}, \ldots, \theta_K^{\text{in}}$
+with $z$ included in each training set and $K$ shadow models
+$\theta_1^{\text{out}}, \ldots, \theta_K^{\text{out}}$ with $z$ excluded. The
+observed scores
+\begin{align}
+  \phi^{\text{in}}_k  &= \phi(z, \theta_k^{\text{in}}),  \quad k = 1, \ldots, K, \\
+  \phi^{\text{out}}_k &= \phi(z, \theta_k^{\text{out}}), \quad k = 1, \ldots, K,
+\end{align}
+are used to fit Gaussian distributions $\mathcal{N}(\mu^{\text{in}},
+\sigma^{\text{in}})$ and $\mathcal{N}(\mu^{\text{out}}, \sigma^{\text{out}})$
+by maximum likelihood. The membership score for $z$ under the target model is
+the log-likelihood ratio:
+\begin{equation}
+  \Lambda(z) = \log \frac{p(\phi(z, \theta) \mid \mathcal{N}(\mu^{\text{in}},
+  \sigma^{\text{in}}))}{p(\phi(z, \theta) \mid \mathcal{N}(\mu^{\text{out}},
+  \sigma^{\text{out}}))}.
+  \label{eq:lira}
+\end{equation}
+A positive value of $\Lambda(z)$ indicates that the target score is more
+consistent with the in-distribution than the out-distribution, suggesting
+membership.
+
+LiRA is statistically principled in the sense that, if the Gaussian assumption
+holds and the shadow models are drawn from the same distribution as the target,
+the likelihood ratio is the optimal test for membership at any false positive
+rate~\cite{carlini2022membership}. In practice, the Gaussian fit is
+approximate, the shadow model distribution may differ from the target, and $K$
+is finite, all of which introduce error.
+
+\noindent\textbf{Online vs offline LiRA.}
+The formulation above is the \emph{online} variant: for each target example,
+half of the $K$ shadow models are trained with it included (IN) and half with
+it excluded (OUT), producing two empirical distributions. This is expensive
+because a separate set of shadow models must be trained for each target example.
+
+The \emph{offline} variant avoids this cost by training all $K$ shadow models
+without the target example, producing only the OUT distribution
+$\mathcal{N}(\mu^{\text{out}}, \sigma^{\text{out}})$. The membership score
+then becomes a one-sided test: how far above the OUT baseline does the target
+model's score fall?
+\begin{equation}
+  \Lambda_{\text{offline}}(z)
+  = \Phi\!\left(\phi(z, \theta);\, \mu^{\text{out}},\, \sigma^{\text{out}}\right),
+  \label{eq:lira_offline}
+\end{equation}
+where $\Phi(\,\cdot\,; \mu, \sigma)$ is the Gaussian CDF. A score close to 1
+indicates that the target model's value on $z$ is unusually high relative to
+what shadow models produce when $z$ is absent from their training data,
+suggesting membership. A score near 0.5 is consistent with the OUT distribution
+and suggests non-membership.
+
+The offline variant is used throughout this thesis. Its practical advantage is
+that the same $K$ shadow models can be reused for every target subject, because
+none of them ever includes any target subject's data. This is a natural fit for
+the subject-level attack: the shadow models are trained on random subsets of
+available pair data, and each target subject's pairs are simply held out of all
+shadows. The statistical cost relative to the online variant is small when the
+target example has limited influence on each shadow, which holds when the
+training set is large relative to a single subject's contribution.
+
+For gait authentication, the per-example score $\phi$ is adapted to the
+pairwise nature of the model. Rather than a single loss value for a single
+example, the relevant quantity for a subject $s$ is a per-subject delta:
+\begin{equation}
+  \delta(s) = \bar{P}_{\text{imp}}(s) - \bar{P}_{\text{gen}}(s),
+  \label{eq:bg_delta}
+\end{equation}
+where $\bar{P}_{\text{imp}}(s)$ is the mean model output $P(\text{different
+person})$ over impostor pairs involving $s$, and $\bar{P}_{\text{gen}}(s)$ is
+the mean over genuine pairs. A training subject whose gait representation has
+been fitted tightly by the model will tend to produce a larger gap between
+impostor and genuine scores, resulting in a higher $\delta(s)$ compared to a
+held-out subject. The shadow models are trained with and without each target
+subject's pairs, and the resulting distributions of $\delta$ values are used in
+place of the standard loss distributions in Equation~\eqref{eq:lira}.

@@ -1,0 +1,61 @@
+\chapter{Introduction}
+\label{ch:introduction}
+
+\section{Motivation}
+\label{sec:intro_motivation}
+
+The way a person walks is shaped by a combination of skeletal geometry, muscle coordination, and habitual movement patterns. These characteristics are person-specific enough to distinguish individuals reliably over short timescales, which makes gait a natural candidate for continuous biometric authentication: a system can verify a user's identity from inertial sensor readings collected during normal device use, without requiring any explicit interaction. Smartphones already carry the accelerometers and gyroscopes needed to collect gait signals, so the infrastructure cost of deployment is low.
+
+Gait is, however, not static. Ageing, injury, weight change, and health conditions can alter a person's movement signature over months or years. This creates a practical problem for authentication systems that learn a fixed representation of a person's gait: the representation becomes stale, and the system must be updated without requiring the enrolled user to repeat the full enrolment procedure. This consideration motivates the two-component architecture used. The CNN encoder is trained once to learn a general-purpose gait representation from many subjects. The authentication head is trained separately to compare pairs of CNN-encoded windows and decide whether they come from the same person. Because authentication is framed as a pairwise distance comparison rather than a direct classification into a fixed set of enrolled identities, recalibration requires minimal retraining and fine-tuning of the authentication head on fresh reference windows from the same person, without touching the encoder. Adding a new user similarly requires no retraining of the encoder: only a set of reference windows is needed to enrol.
+
+Any machine learning model trained on sensitive personal data carries a general privacy risk: models tend to fit their training examples more closely than held-out examples, and an attacker who can query the model may be able to exploit that asymmetry to infer whether a particular individual was in the training set. This is the membership inference problem~\cite{shokri2017membership}, and it is not specific to gait authentication. What is not known is how much membership signal is present in this particular architecture, under realistic threat models, and across different datasets and pipeline configurations. A person's gait encodes information about their age, health, and physical state, so the question has practical implications beyond the technical evaluation.
+
+The layered architecture raises a further question that is specific to the two-component pipelines. Both the CNN encoder and the LSTM authentication head are trained on the same subjects in the standard configuration, so any memorisation is distributed across both components. It is therefore not clear how much of the observed membership signal, if any, comes from the encoder versus the authentication head. The two components have different architectures, different training objectives, and different amounts of exposure to each subject's data, so their individual contributions may differ substantially and may call for different mitigations. Separating them requires an experimental design in which the two components are trained on non-overlapping sets of subjects, which the signal disentanglement experiment in this thesis provides.
+
+Beyond membership inference, a deployed authentication system faces a second threat: an adversary who wishes to be accepted as a legitimate user. Projected gradient descent (PGD) attacks can perturb an impostor's gait signal to minimise the system's output distance to a target member, potentially crossing the decision boundary with a perturbation small enough to remain within the natural variation of human gait. Whether such perturbations are practically achievable, and whether they leave detectable spectral artefacts, is an open question for gait-based systems that has received less attention than the equivalent question in image-domain authentication.
+
+\section{Problem Statement}
+\label{sec:intro_problem}
+
+This thesis investigates two families of attacks on a gait-based authentication system built on the CNN architecture from Zou et al.~\cite{zou2020deep}.
+
+The first family is membership inference. Given black-box or grey-box access to a trained authentication model, the attacker aims to determine whether a specific subject's gait data was part of the training set. The attack surface is the model's per-pair output score: the probability that two gait windows come from different people. A subject who was a training member may produce a systematically different score distribution compared to a held-out subject, and this difference constitutes the membership signal. The thesis evaluates several attack variants that differ in how much information the attacker has about the target model: a simple score-based baseline, a likelihood ratio attack using shadow models initialised from the target weights (grey-box), a warm-start black-box variant that uses a separately trained surrogate for initialisation, and a cold-start black-box variant that starts from random weights. The evaluation spans four dataset configurations: a within-dataset run on whuGAIT, within-dataset runs on UCI-HAR and WISDM, and a cross-dataset run in which a whuGAIT-pretrained encoder is paired with an authenticator retrained on subjects from all three datasets.
+
+The second problem, addressed by a dedicated experiment, is the source of the membership signal. Since both the CNN encoder and the LSTM authentication head are trained on the same subjects in the standard pipeline, it is not possible to attribute the observed signal to one component or the other. To separate the two contributions, the thesis introduces a three-group experimental design in which subjects are partitioned so that the CNN sees one group, the authenticator sees a different group, and a third group serves as a held-out baseline seen by neither. Scoring all three groups with a single trained authenticator allows the per-group attack signal to be compared directly.
+
+The third problem is evasion. For each dataset configuration, PGD is used to search for minimum-norm perturbations that cause the authentication model to accept an impostor's gait signal as genuine. The budget required for a successful attack is measured relative to the natural intra-subject variation in gait, providing a calibrated scale for the severity of the vulnerability.
+
+\section{Contributions}
+\label{sec:intro_contributions}
+
+The main contributions of this thesis are as follows.
+
+\begin{itemize}
+
+  \item \textbf{Membership inference evaluation across multiple datasets and threat models.}
+  The simple-delta attack and three LiRA variants (grey-box, warm-start black-box, cold-start black-box) are evaluated on four pipeline configurations: whuGAIT, UCI-HAR, WISDM, and a combined cross-dataset run. Cold-start consistently outperforms warm-start across all datasets, because random initialisation gives each shadow model an independent starting point and produces more diverse OUT distributions for the LiRA test. The delta variant comparison (raw, logit-first, mean-first) is therefore restricted to cold-start. The evaluation surfaces a pair-correlation confound specific to the whuGAIT Dataset~\#5 pair construction that inverts the grey-box signal, and identifies cold-start LiRA as the least affected variant.
+
+  \item \textbf{CNN vs authenticator memorisation signal disentanglement.}
+  A three-group subject split is proposed in which the CNN encoder and the LSTM authenticator are trained on non-overlapping subjects within the whuGAIT dataset. Scoring all groups with a common authenticator allows the CNN's memorisation contribution to be separated from the LSTM's contribution. The experiment shows that both components produce signal above the held-out baseline, with the authenticator's contribution slightly exceeding the CNN's for simple-delta and cold-start LiRA, while the gap between the two narrows to near zero for the grey-box attack.
+
+  \item \textbf{Evasion attack evaluation.}
+  A PGD impersonation attack is conducted on all four dataset configurations. The minimum perturbation budget required for a successful attack is compared against the median intra-subject gait variation, providing a naturalness baseline. Spectral analysis of the successful perturbations is included for the whuGAIT configuration.
+
+\end{itemize}
+
+\section{Thesis Outline}
+\label{sec:intro_outline}
+
+Chapter~\ref{ch:background} introduces the technical background: the properties of gait signals that make them suitable for authentication, the architecture of the CNN and LSTM components used in this work, and the formal framework for membership inference attacks including the LiRA construction.
+
+Chapter~\ref{ch:related} surveys prior work on gait-based authentication, membership inference on biometric and machine learning systems, and adversarial attacks on authentication models, and positions this thesis relative to that literature.
+
+Chapter~\ref{ch:system} describes the three datasets used in the evaluation, the subject split and pair construction procedure, the CNN encoder and authentication model architectures, and the four experimental configurations.
+
+Chapter~\ref{ch:mia} presents the membership inference experiments: the simple-delta baseline, the LiRA shadow model attack in its three threat model variants, the delta formulation comparison, and a discussion of the whuGAIT pair-correlation confound.
+
+Chapter~\ref{ch:signal} presents the signal disentanglement experiment: the three-group design, the authentication model performance per group, and the per-group membership signal comparison across attack variants.
+
+Chapter~\ref{ch:evasion} presents the evasion attack: the PGD formulation, the epsilon budget estimation procedure, and the attack success rate and budget ratio results across all configurations, with a spectral analysis of the perturbations.
+
+Chapter~\ref{ch:conclusions} summarises the findings, discusses the limitations of the experimental design, and identifies directions for future work.
