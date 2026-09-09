@@ -8,14 +8,7 @@
 \subsection{Early Approaches and Feature Engineering}
 \label{ssec:rel_gait_early}
 
-Interest in gait as a biometric signal dates to the early 2000s, when
-Gafurov et al.~\cite{gafurov2007gait} demonstrated that accelerometer recordings
-from waist-mounted devices could distinguish individuals at rates well above
-chance using handcrafted cycle-level features. These features proved brittle
-when device placement or walking speed varied. The UCI-HAR~\cite{anguita2013human}
-and WISDM~\cite{kwapisz2011activity} datasets were originally collected for
-activity recognition but became common benchmarks for gait-related tasks due to
-their multi-subject, naturalistic recordings.
+Interest in gait as a biometric signal dates to the early 2000s, when Gafurov et al.~\cite{gafurov2007gait} demonstrated that accelerometer recordings from waist-mounted devices could distinguish individuals at rates well above chance using handcrafted cycle-level features. These features proved brittle when device placement or walking speed varied. The UCI-HAR~\cite{anguita2013human} and WISDM~\cite{kwapisz2011activity} datasets were originally collected for activity recognition but became common benchmarks for gait-related tasks due to their multi-subject, naturalistic recordings.
 
 \subsection{Deep Learning Approaches}
 \label{ssec:rel_gait_deep}
@@ -25,13 +18,7 @@ Zou et al.~\cite{zou2020deep} showed that a CNN encoder trained directly on raw 
 \subsection{Privacy in Gait Systems}
 \label{ssec:rel_gait_privacy}
 
-Privacy analysis of trained gait models has received considerably less attention
-than recognition accuracy. Malekzadeh et al.~\cite{malekzadeh2018mobile} address
-gait anonymisation, a different threat model aimed at protecting raw signals
-before transmission rather than limiting what a trained model leaks.
-Milani~\cite{milani2024gait} analyses identity inference vulnerability in a gait
-identification pipeline. The present thesis extends that analysis to an
-authentication pipeline and evaluates it across multiple datasets.
+Privacy analysis of trained gait models has received considerably less attention than recognition accuracy. Malekzadeh et al.~\cite{malekzadeh2018mobile} address gait anonymisation, a different threat model aimed at protecting raw signals before transmission rather than limiting what a trained model leaks. Milani~\cite{milani2024gait} analyses identity inference vulnerability in a gait identification pipeline. The present thesis extends that analysis to an authentication pipeline and evaluates it across multiple datasets.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Membership Inference on Machine Learning Models}
@@ -40,36 +27,12 @@ authentication pipeline and evaluates it across multiple datasets.
 \subsection{Foundational Work}
 \label{ssec:rel_mia_foundations}
 
-Shokri et al.~\cite{shokri2017membership} formalised membership inference by
-training shadow models with known membership labels and using their outputs to
-build an attack classifier. Yeom et al.~\cite{yeom2018privacy} grounded the
-attack theoretically: the training-test loss gap upper-bounds the attack
-advantage, directly connecting memorisation to vulnerability. Salem
-et al.~\cite{salem2019ml} showed that a single shadow model and no knowledge
-of the target architecture are often sufficient, lowering the bar for practical
-attacks. Carlini et al.~\cite{carlini2022membership} unified these ideas into a
-likelihood ratio framework (LiRA) that is statistically optimal at any false
-positive rate and substantially outperforms earlier methods, particularly on
-models with small generalisation gaps; the offline variant is the formulation
-adopted in this thesis and is described in detail in
-Section~\ref{ssec:bg_lira}.
+Shokri et al.~\cite{shokri2017membership} formalised membership inference by training shadow models with known membership labels and using their outputs to build an attack classifier. Yeom et al.~\cite{yeom2018privacy} grounded the attack theoretically: the training-test loss gap upper-bounds the attack advantage, directly connecting memorisation to vulnerability. Salem et al.~\cite{salem2019ml} showed that a single shadow model and no knowledge of the target architecture are often sufficient, lowering the bar for practical attacks. Carlini et al.~\cite{carlini2022membership} unified these ideas into a likelihood ratio framework (LiRA) that is statistically optimal at any false positive rate and substantially outperforms earlier methods, particularly on models with small generalisation gaps; the offline variant is the formulation adopted in this thesis and is described in detail in Section~\ref{ssec:bg_lira}.
 
 \subsection{MIA on Biometric Models}
 \label{ssec:rel_mia_biometric_detail}
 
-Standard MIA pipelines operate on the softmax output of a classifier, using
-the per-class confidence vector as the membership signal. Authentication models
-produce no such output: the model scores pairs of windows rather than assigning
-class probabilities to individual inputs, so the standard attack surface does
-not exist. He and Zhang~\cite{he2021quantifying} studied this problem in the
-context of contrastive learning, where models similarly produce embeddings
-rather than class probabilities. They adapted existing MIA methods to operate
-on the representation space and found that contrastive models are less
-vulnerable to membership inference than supervised classifiers, attributing
-this to their reduced tendency to overfit individual training examples. This
-thesis faces the same structural obstacle and derives an alternative membership
-signal from the distribution of pairwise authentication scores, as described
-in Chapter~\ref{ch:mia}.
+Standard MIA pipelines operate on the softmax output of a classifier, using the per-class confidence vector as the membership signal. Authentication models produce no such output: the model scores pairs of windows rather than assigning class probabilities to individual inputs, so the standard attack surface does not exist. He and Zhang~\cite{he2021quantifying} studied this problem in the context of contrastive learning, where models similarly produce embeddings rather than class probabilities. They adapted existing MIA methods to operate on the representation space and found that contrastive models are less vulnerable to membership inference than supervised classifiers, attributing this to their reduced tendency to overfit individual training examples. This thesis faces the same structural obstacle and derives an alternative membership signal from the distribution of pairwise authentication scores, as described in Chapter~\ref{ch:mia}.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Adversarial Attacks on Authentication}
@@ -78,36 +41,15 @@ in Chapter~\ref{ch:mia}.
 \subsection{Adversarial Examples}
 \label{ssec:rel_evasion_foundations}
 
-Szegedy et al.~\cite{szegedy2014intriguing} identified that small input
-perturbations can reliably change a classifier's output. Goodfellow
-et al.~\cite{goodfellow2015explaining} proposed FGSM as a single-step gradient
-attack; Madry et al.~\cite{madry2018towards} showed that iterative PGD with
-random restart finds stronger examples and serves as a principled robustness
-benchmark. The evasion attack in this thesis uses PGD adapted to the pairwise
-authentication setting: the goal is an impostor gait window that the model
-accepts as the enrolled target.
+Szegedy et al.~\cite{szegedy2014intriguing} identified that small input perturbations can reliably change a classifier's output. Goodfellow et al.~\cite{goodfellow2015explaining} proposed FGSM as a single-step gradient attack; Madry et al.~\cite{madry2018towards} showed that iterative PGD with random restart finds stronger examples and serves as a principled robustness benchmark. The evasion attack in this thesis uses PGD adapted to the pairwise authentication setting: the goal is a perturbed gait window that crosses the model's acceptance threshold.
 
 \subsection{Adversarial Attacks on Biometric Systems}
 \label{ssec:rel_evasion_biometric}
 
-Sharif et al.~\cite{sharif2016accessorize} demonstrated physical adversarial
-attacks on face recognition via printed eyeglass frames. Gait authentication
-presents a different attack surface: the signal is a sensor recording, so
-perturbations are applied digitally rather than physically. This thesis
-evaluates such digital attacks and assesses whether the required perturbation
-budget is consistent with natural within-subject gait variability.
+Sharif et al.~\cite{sharif2016accessorize} demonstrated physical adversarial attacks on face recognition via printed eyeglass frames. Gait authentication presents a different attack surface: the signal is a sensor recording, so perturbations are applied digitally rather than physically. This thesis evaluates such digital attacks and assesses whether the required perturbation budget is consistent with natural within-subject gait variability.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Positioning of This Work}
 \label{sec:rel_positioning}
 
-This thesis applies membership inference to a pairwise authentication model,
-where the standard softmax-based attack surface does not exist and the
-membership signal must be derived from the distribution of pair scores. The
-evaluation spans multiple datasets under three controlled threat models.
-A signal disentanglement experiment isolates the privacy contribution of the
-CNN encoder from that of the LSTM authentication head, treating the two
-components separately by construction. The evasion evaluation complements
-attack success rate with a check against natural within-subject gait
-variability, giving a concrete sense of whether successful perturbations
-are practically realisable.
+This thesis applies membership inference to a pairwise authentication model, where the standard softmax-based attack surface does not exist and the membership signal must be derived from the distribution of pair scores. The evaluation spans multiple datasets under three controlled threat models. A signal disentanglement experiment isolates the privacy contribution of the CNN encoder from that of the LSTM authentication head, treating the two components separately by construction. The evasion evaluation complements attack success rate with a check against natural within-subject gait variability, giving a concrete sense of whether successful perturbations are practically realisable. The evaluation does not address privacy-hardened defences, streaming authentication settings, or physical attack surfaces.

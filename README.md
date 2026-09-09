@@ -1,11 +1,7 @@
 # Membership Inference Attack on Gait Authentication
 
-Investigates Membership Inference Attacks (MIA) and evasion attacks on a gait
-authentication system built on the whuGAIT CNN (Zou et al. 2020). The
-authenticator takes two gait windows and outputs P(different person). The MIA
-asks whether a subject was in the training set of the authentication LSTM; the
-signal also reflects CNN memorisation because a frozen encoder that has seen a
-subject produces tighter representations, amplifying the per-subject delta gap.
+Investigates Membership Inference Attacks (MIA) and evasion attacks on a gait authentication system built on the whuGAIT CNN (Zou et al. 2020). 
+The authenticator takes two gait windows and outputs P(different person). The MIA asks whether a subject was in the training set of the authentication LSTM; the signal also reflects CNN memorisation because a frozen encoder that has seen a subject produces tighter representations, amplifying the per-subject delta gap.
 
 ---
 
@@ -17,6 +13,7 @@ python run_pipeline.py whuGAIT
 python run_pipeline.py ucihar
 python run_pipeline.py wisdm
 python run_pipeline.py combined        # uses frozen whuGAIT CNN encoder
+python run_pipeline.py whuGAIT_signal  # CNN vs auth signal disentanglement experiment
 
 # Run all configured datasets in sequence
 python run_pipeline.py
@@ -63,9 +60,10 @@ add negligible time (~30 s total). The analysis step is skipped only when
 
 ## Pipeline structure
 
+**Standard runs** (whuGAIT / ucihar / wisdm / combined):
 ```
 NB01  Explore + split
-  └─► NB02  Train CNN encoder
+  └─► NB02  Train CNN encoder   [skipped for combined: reuses whuGAIT checkpoint]
         └─► NB03  Train authenticator (CNN+LSTM)
               ├─► NB04  MIA signal (per-subject delta)
               │     └─► NB05a  Delta variants (raw / logit-first / mean-first)
@@ -75,10 +73,21 @@ NB01  Explore + split
                     └─► NB06b  PGD impersonation attack
                           └─► NB06c  Attack validation (spectral, K-ablation)
 
-  [after all notebooks]
+  [after all pipeline runs]
   ──► compare_models    cross-dataset accuracy and overfitting comparison
   ──► compare_mia       MIA signal, LiRA variants, threat model comparison
   ──► compare_evasion   evasion ASR, budget ratio, train vs test
+  ──► compare_combined  deep dive on the combined run
+```
+
+**Signal disentanglement run** (whuGAIT_signal — no evasion):
+```
+01_explore_whuGAIT_signal   build three-group split + auth_pairs from D1
+  └─► NB02  Train CNN on group A (subjects 21–40)
+        └─► NB03  Train authenticator on group B (subjects 41–60, CNN frozen)
+              └─► NB04  MIA signal + three-way group analysis
+                    └─► NB05a / NB05b / NB05c  attack variants and threat models
+                          └─► signal_disentanglement   per-group auth AUC, MIA AUC, ROC
 ```
 
 ---
@@ -106,6 +115,7 @@ for any macro not yet generated:
 \input{../generated/compare_mia_whuGAIT_metrics}
 \input{../generated/compare_evasion_whuGAIT_metrics}
 % ... same for ucihar, wisdm, combined
+\input{../generated/signal_disentanglement_metrics}   % whuGAIT_signal run only
 ```
 
 To compile the results note after a run:
@@ -126,6 +136,7 @@ so the PDF is always consistent with the latest run.
 ```
 run_pipeline.py              entry point
 config.yaml                  all hyperparameters and quick-mode overrides
+REVIEW.md                    code-review findings log
 
 notebooks/
   01_explore_*.ipynb         data exploration and subject split (one per dataset)
@@ -139,9 +150,11 @@ notebooks/
   06b_attack.ipynb           PGD evasion attack
   06c_attack_validation.ipynb spectral analysis and K-ablation
   analysis/
-    compare_models.ipynb     cross-dataset accuracy and overfitting
-    compare_mia.ipynb        cross-dataset MIA signal and LiRA results
-    compare_evasion.ipynb    cross-dataset evasion results
+    compare_models.ipynb          cross-dataset accuracy and overfitting
+    compare_mia.ipynb             cross-dataset MIA signal and LiRA results
+    compare_evasion.ipynb         cross-dataset evasion results
+    compare_combined.ipynb        deep dive on the combined run
+    signal_disentanglement.ipynb  CNN vs auth memorisation signal (whuGAIT_signal run)
 
 artifacts/{dataset}/         structured outputs consumed by analysis notebooks
   subject_split.json         member / non-member subject IDs
@@ -157,23 +170,40 @@ checkpoints/{dataset}/       model weights (gitignored)
   cnn_encoder.pt
   auth_model.pt
 
+embeddings/{dataset}/cnn/    CNN encoder embeddings saved after NB02 (gitignored)
+  train_embeddings.npy
+  test_embeddings.npy
+
 executed/{dataset}/          executed notebooks with embedded outputs
 executed/analysis/           executed analysis notebooks (auto-updated)
 
 latex/
-  notes/results_note.tex     IEEE two-column results summary
+  main.tex                   thesis LaTeX source
+  notes/results_note.tex     single-column results summary (lab note)
   generated/                 auto-generated macro files (do not edit manually)
 
-results/analysis/            figures generated by analysis notebooks (auto-updated)
+logs/{dataset}/              per-notebook training logs
+
+results/{dataset}/           per-run figures written by pipeline notebooks
+results/analysis/            cross-dataset figures written by analysis notebooks
   models_accuracy.png
   models_overfitting_curves.png
   models_separation.png
   mia_nb04_deltas.png
-  mia_roc_comparison.png
+  mia_nb05b_lira.png
   mia_nb05c_auc.png
+  mia_nb05c_accuracy.png
+  mia_nb05c_threat_models.png
+  mia_roc_comparison.png
   evasion_summary_bars.png
   evasion_eps_distribution.png
   evasion_train_vs_test.png
+  combined_per_dataset_perf.png
+  combined_score_distributions.png
+  combined_training_curves.png
+  signal_auth_performance.png    # auth AUC/accuracy per subject group (whuGAIT_signal)
+  signal_mia_auc_per_group.png   # mean attack-score rank per group and variant
+  signal_roc_per_group.png       # ROC curves for B-vs-C and A-vs-C attack settings
 
 src/
   models/                    GaitCNN, authentication LSTM
@@ -195,6 +225,7 @@ documentation/               reference papers and original TF1 implementation
 | `ucihar` | UCI-HAR | within-dataset | 6-class activity |
 | `wisdm` | WISDM | within-dataset | 51-class activity |
 | `combined` | all three | frozen whuGAIT | LSTM retrained cross-dataset |
+| `whuGAIT_signal` | whuGAIT | within-dataset | CNN vs auth memorisation signal disentanglement (subjects 1–60 only; no evasion) |
 
 ---
 

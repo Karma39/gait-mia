@@ -1,0 +1,315 @@
+\chapter{Membership Inference Attack}
+\label{ch:mia}
+
+The central question of this chapter is whether the authentication model's output behaviour reveals which subjects were in its training set. The attack score is built from the per-subject delta $\delta(s)$, which measures how much more discriminatively the model separates a subject's genuine and impostor pairs. A simple threshold on $\delta(s)$ already provides a baseline attack that requires no knowledge of the model's internals. To go further, LiRA casts the problem as a likelihood ratio test by training shadow models and comparing the target subject's score distribution against what would be expected if they were absent from training. Three shadow-model initialisation strategies are evaluated. The grey-box variant assumes access to the target checkpoint. The warm-start variant tests whether a shared surrogate initialisation can reduce per-shadow training cost without substantially sacrificing attack effectiveness. The cold-start variant uses independent random initialisation for each shadow and consistently outperforms the other two. Once cold-start is established as the most effective threat model, three delta formulations are compared on it. On whuGAIT, both grey-box and warm-start produce inverted signals whose cause is not fully established.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Attack Formulation}
+\label{sec:mia_formulation}
+
+Following the Identity Inference Attack (IIA) framing of Milani~\cite{milani2024gait}, the goal is to determine whether a target subject $s$ was enrolled in the model's training set, using only gait windows from $s$ that need not be the exact training samples~\cite{li2022userlevel}. The attack score is derived from the model's pairwise output distribution for $s$.
+
+\subsection{Per-Subject Delta Score}
+\label{ssec:mia_delta}
+
+The authentication model takes a pair of gait windows as input and outputs $P(\text{different person} \mid \mathbf{x}_1, \mathbf{x}_2) \in [0, 1]$. A high output means the model considers the pair to come from two different people; a low output means it considers them genuine. For a subject $s$, two distributions of such scores can be observed:
+
+\begin{itemize}
+  \item \emph{Genuine pairs}: pairs in which both windows come from $s$.
+    A well-fitted model should score these low (close to 0).
+  \item \emph{Impostor pairs}: pairs in which one window comes from $s$ and
+    one from a different subject.
+    A well-fitted model should score these high (close to 1).
+\end{itemize}
+
+The per-subject delta is the mean gap between these two distributions (see Equation~\eqref{eq:bg_delta} in Section~\ref{ssec:bg_lira}):
+\begin{equation*}
+  \delta(s) = \bar{P}_{\text{imp}}(s) - \bar{P}_{\text{gen}}(s),
+\end{equation*}
+where $\bar{P}_{\text{imp}}(s)$ is the mean model output over impostor pairs involving $s$ and $\bar{P}_{\text{gen}}(s)$ is the mean over genuine pairs. Using raw $P(\text{different person})$ as the membership signal directly is not straightforward: the signal direction is opposite for the two pair types, since a well-fitted model drives genuine scores down and impostor scores up. A single pair score is therefore ambiguous without knowing the pair type, and using only one pair type discards half the available signal. The delta resolves this by combining both in a single consistent quantity. It also cancels subject-level baseline differences: some subjects have inherently more distinctive gait and produce high impostor scores regardless of training membership; subtracting $\bar{P}_{\text{gen}}$ normalises for this, so $\delta(s)$ measures how much more separated the model is for $s$ relative to that subject's own baseline.
+
+\subsection{Member vs Non-Member Hypothesis}
+\label{ssec:mia_hypothesis}
+
+The membership hypothesis is that the model fits its training subjects more tightly than held-out subjects, producing systematically larger deltas for members. Concretely, if $\mathcal{M}$ and $\mathcal{N}$ denote the sets of member and non-member subjects respectively, the attack expects:
+\begin{equation}
+  \mathbb{E}_{s \in \mathcal{M}}[\delta(s)]
+  > \mathbb{E}_{s \in \mathcal{N}}[\delta(s)].
+\end{equation}
+An attack that uses $\delta(s)$ directly or a function of it to classify $s$ as member or non-member is evaluated by the area under the ROC curve (AUC) over the binary classification of all subjects. AUC $= 0.5$ corresponds to random guessing; AUC $= 1.0$ corresponds to perfect separation. The TPR at 10\% FPR is reported alongside AUC to give a consistent low-FPR operating point that is comparable across all attack variants.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Simple-Delta Attack}
+\label{sec:mia_simple}
+
+\subsection{Results Across Datasets}
+\label{ssec:mia_simple_results}
+
+The simplest attack uses $\delta(s)$ directly as the membership score, with no shadow models. A subject $s$ is classified as a member if $\delta(s)$ exceeds a threshold. This attack requires only black-box query access to the model and knowledge of which windows belong to which subject. Members tend to produce higher deltas because the LSTM has been trained directly on their pairs, making it more discriminative for their gait patterns. Non-members have never been seen during training, so their genuine and impostor pairs are scored with less precision and the gap is smaller.
+
+Table~\ref{tab:simple_delta} reports the simple-delta AUC and TPR at 10\% FPR for all four configurations. Because the non-member population ranges from 9 to 20 subjects, the ROC curve is coarse and the TPR at 10\% FPR value can only take a small number of discrete steps; the reported figure should be read as an approximate operating point rather than a precise measurement.
+
+\begin{table}[htbp]
+\centering
+\caption{Simple-delta MIA results. TPR at 10\% FPR is coarse due to small non-member populations (9--20 subjects).}
+\label{tab:simple_delta}
+\begin{tabular}{lrr}
+\toprule
+Configuration & AUC & TPR at 10\% FPR \\
+\midrule
+whuGAIT  & \whuGAITSimplDAUC  & \whuGAITSimplDTPRten \\
+UCI-HAR  & \uciharSimplDAUC   & \uciharSimplDTPRten  \\
+WISDM    & \wisdmSimplDAUC    & \wisdmSimplDTPRten   \\
+Combined & \combinedSimplDAUC & \combinedSimplDTPRten \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The simple-delta attack produces AUC above 0.5 in all four configurations, confirming that a membership signal is present in the authentication model across datasets. WISDM shows the strongest signal (\wisdmSimplDAUC), reflecting the fact that 128-sample windows at 20\,Hz span 6.4 seconds and therefore capture several complete gait cycles per window, giving the model more person-specific structure to memorise. The combined configuration shows the weakest signal (\combinedSimplDAUC), consistent with the cross-dataset distribution shift making it harder for the LSTM to fit any single subject's gait as tightly as in the within-dataset runs.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{LiRA Shadow Model Attack}
+\label{sec:mia_lira}
+
+\subsection{Shadow Model Training}
+\label{ssec:mia_shadow_train}
+
+The LiRA attack requires training $K$ shadow LSTM models, each on a different subset of the training pairs. The shadow models approximate the distribution of model behaviours when a target subject is excluded from training (OUT distribution), which is then used to assess how unusual the target model's delta is for that subject.
+
+Each shadow is trained with the member-aware split protocol. For each shadow $k$, a random 50\% of the known member subjects is drawn as the included set. Only pairs whose both windows come from subjects in the included set are used to train that shadow. This ensures that a target subject assigned as OUT for shadow $k$ does not appear in its training data even through the reference window of a cross-subject pair. The remaining 50\% of members constitutes the OUT set for that shadow, and the shadow's delta values for those OUT subjects form the empirical samples of the OUT distribution.
+
+All experiments use $K = 32$ shadow models. Each shadow is trained for 3 epochs with the Adam optimiser, using the same hyperparameters as the target model (learning rate $2.5 \times 10^{-3}$, weight decay $1.5 \times 10^{-3}$, dropout 0.3). Three epochs keeps shadow training tractable at $K = 32$; whether additional epochs would change the attack success is not evaluated.
+
+\subsection{Likelihood Ratio Score}
+\label{ssec:mia_lr_score}
+
+For each target subject $s$, the $K$ shadow models that had $s$ in their OUT set provide samples of the delta distribution under the hypothesis that $s$ was not in training. Let $\delta^{\text{out}}_k(s)$ denote the delta computed from shadow $k$ for subject $s$, where $s \notin$ shadow $k$'s training set. A Gaussian is fitted to these samples:
+\begin{equation}
+  \mu^{\text{out}}(s),\; \sigma^{\text{out}}(s)
+  \;=\; \text{MLE fit of }
+  \bigl\{\delta^{\text{out}}_k(s)\bigr\}_{k:\, s \notin \text{train}_k}.
+\end{equation}
+The offline LiRA score (Equation~\eqref{eq:lira_offline} from Chapter~\ref{ch:background}) is then:
+\begin{equation}
+  \text{score}(s)
+  = \Phi\!\bigl(\delta_{\text{target}}(s);\,
+    \mu^{\text{out}}(s),\, \sigma^{\text{out}}(s)\bigr),
+\end{equation}
+where $\delta_{\text{target}}(s)$ is the delta computed from the target model. A score close to 1 means the target model produces a higher delta for $s$ than the OUT shadow distribution predicts, indicating membership.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Threat Model Comparison}
+\label{sec:mia_threat}
+
+Three shadow initialisation strategies are compared. The grey-box variant assumes access to the target model checkpoint; the warm-start and cold-start variants both assume architecture-only knowledge and differ only in whether a shared surrogate is used to initialise the shadows. All three use the raw-delta formulation and the same $K = 32$ shadow budget.
+
+\subsection{Grey-Box Attack}
+\label{ssec:mia_grey}
+
+The grey-box attacker has access to the target model checkpoint and initialises each of the $K = 32$ shadow LSTMs from those exact weights. Each shadow is then fine-tuned for 3 epochs on its 50\% member subset.
+
+\subsection{Cold-Start Black-Box Attack}
+\label{ssec:mia_cold}
+
+The cold-start attacker knows only the model architecture. Each of the $K = 32$ shadow LSTMs is initialised independently from random Xavier weights and trained for 3 epochs on its 50\% member subset. There is no shared starting point between shadows.
+
+\subsection{Warm-Start Black-Box Attack}
+\label{ssec:mia_warm}
+
+Like cold-start, the warm-start attacker knows only the model architecture. The difference is the initialisation strategy: rather than starting each shadow from independent random weights, the attacker first trains a single surrogate LSTM from random initialisation for 5 epochs on all available pairs, then uses those surrogate weights as the shared starting point for all $K$ shadow models. Each shadow is then fine-tuned for 3 epochs on its 50\% member subset. The motivation is to test whether this head start reduces effective training time per shadow without substantially reducing attack effectiveness.
+
+\subsection{Results and Discussion}
+\label{ssec:mia_threat_results}
+
+Table~\ref{tab:threat_comparison} summarises the raw-delta AUC and TPR at 10\% FPR across all three threat models and four configurations.
+
+\begin{table}[htbp]
+\centering
+\caption{LiRA results (raw-$\delta$) by threat model. AUC below 0.5 indicates
+         inverted signal for grey-box and warm-start on whuGAIT (see Section~\ref{ssec:mia_threat_results}).}
+\label{tab:threat_comparison}
+\begin{tabular}{llrrrr}
+\toprule
+Config & Metric & Simple-$\delta$ & Grey & Warm & Cold \\
+\midrule
+\multirow{2}{*}{whuGAIT}
+  & AUC          & \whuGAITSimplDAUC   & \whuGAITGreyLiraRawAUC  & \whuGAITWarmLiraRawAUC  & \whuGAITColdLiraRawAUC  \\
+  & TPR at 10\% FPR  & \whuGAITSimplDTPRten & \whuGAITGreyLiraRawTPRten & \whuGAITWarmLiraRawTPRten & \whuGAITColdLiraRawTPRten \\
+\multirow{2}{*}{UCI-HAR}
+  & AUC          & \uciharSimplDAUC    & \uciharGreyLiraRawAUC   & \uciharWarmLiraRawAUC   & \uciharColdLiraRawAUC   \\
+  & TPR at 10\% FPR  & \uciharSimplDTPRten  & \uciharGreyLiraRawTPRten  & \uciharWarmLiraRawTPRten  & \uciharColdLiraRawTPRten  \\
+\multirow{2}{*}{WISDM}
+  & AUC          & \wisdmSimplDAUC     & \wisdmGreyLiraRawAUC    & \wisdmWarmLiraRawAUC    & \wisdmColdLiraRawAUC    \\
+  & TPR at 10\% FPR  & \wisdmSimplDTPRten   & \wisdmGreyLiraRawTPRten   & \wisdmWarmLiraRawTPRten   & \wisdmColdLiraRawTPRten   \\
+\multirow{2}{*}{Combined}
+  & AUC          & \combinedSimplDAUC  & \combinedGreyLiraRawAUC & \combinedWarmLiraRawAUC & \combinedColdLiraRawAUC \\
+  & TPR at 10\% FPR  & \combinedSimplDTPRten & \combinedGreyLiraRawTPRten & \combinedWarmLiraRawTPRten & \combinedColdLiraRawTPRten \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Cold-start is the most consistent attack across datasets, achieving above-chance AUC in all three within-dataset configurations. The key reason is shadow diversity: when each shadow begins from an independent random initialisation, the $K$ OUT delta values for a given subject span a wider range of model behaviours, producing a more informative Gaussian fit for the LiRA score. Warm-start shadows all converge from the same surrogate, producing OUT distributions that are narrower and more correlated than cold-start's, failing to capture the full variability of the OUT hypothesis, sacrificing the diversity that makes cold-start effective.
+
+Both grey-box and warm-start produce inverted signals on whuGAIT (AUC $= \whuGAITGreyLiraRawAUC$ and $\whuGAITWarmLiraRawAUC$ respectively, both below chance), while performing competitively on UCI-HAR and WISDM. Cold-start is the only variant that avoids inversion on whuGAIT. The common factor between grey-box and warm-start is that both initialise shadows from a pre-trained checkpoint (the target model or a surrogate) that has already seen all enrolled subjects. A plausible explanation is that 3 fine-tuning epochs are not sufficient to override this prior before the OUT subject is scored, inflating the OUT distribution and inverting the LiRA score. The cause is not confirmed; increasing the number of fine-tuning epochs per shadow is a natural direction to explore.
+
+The combined configuration produces near-chance scores across all variants. With 159 training subjects spread across three datasets, the number of OUT samples per subject that satisfy the minimum validity threshold ($\geq 5$ shadow OUT deltas) is insufficient for reliable Gaussian fitting.
+
+Figure~\ref{fig:threat_models} summarises the raw-delta AUC by threat model and dataset; Figure~\ref{fig:mia_roc} shows the corresponding ROC curves. The whuGAIT panel in Figure~\ref{fig:mia_roc} illustrates the signal inversion for grey-box and warm-start: both curves fall below the diagonal, indicating that the attack's scores are anti-correlated with membership. Cold-start is the only variant that remains above the diagonal on whuGAIT.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{analysis/mia_nb05c_threat_models.png}
+  \caption{LiRA AUC (raw-$\delta$) by threat model and dataset. The dashed line
+           marks the random-classifier baseline (AUC $= 0.5$). Grey-box and
+           warm-start fall below chance on whuGAIT; cold-start is above chance
+           on all three within-dataset configurations.}
+  \label{fig:threat_models}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{analysis/mia_roc_comparison.png}
+  \caption{MIA ROC curves for simple-$\delta$ and LiRA variants (grey-box
+           raw, cold-start raw, cold-start logit-first) across all four
+           dataset configurations. AUC values are shown in the legend. The
+           whuGAIT panel shows grey-box falling below the diagonal (inverted
+           signal), while cold-start sits well above it.}
+  \label{fig:mia_roc}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Cold-Start Delta Variants}
+\label{sec:mia_delta_variants}
+
+Having established cold-start as the most effective and robust LiRA threat model, three formulations of the delta score are compared under it. The raw delta in Equation~\eqref{eq:bg_delta} computes the difference of mean model outputs. Two alternatives transform the individual pair scores before aggregation, motivated by the same reasoning as the logit transform in the original LiRA for classification models.
+
+\textbf{Raw} ($\delta_\text{raw}$): direct difference of mean scores,
+$\bar{P}_\text{imp}(s) - \bar{P}_\text{gen}(s)$. Simple and interpretable, but the scale of the difference compresses near 0 and 1 where probabilities saturate.
+
+\textbf{Logit-first} ($\delta_\text{lf}$): the logit transform is applied to
+each individual pair score before computing the mean:
+\begin{equation}
+  \delta_\text{lf}(s)
+  = \overline{\mathrm{logit}\!\left(P_\text{imp}(s)\right)}
+  - \overline{\mathrm{logit}\!\left(P_\text{gen}(s)\right)}.
+\end{equation}
+This is the closest analogue to the original LiRA formulation: the logit is applied per sample before aggregation, stabilising scores at the extremes and giving greater weight to pairs where the model is highly confident.
+
+\textbf{Mean-first} ($\delta_\text{mf}$): the logit is applied after computing
+the mean:
+\begin{equation}
+  \delta_\text{mf}(s)
+  = \mathrm{logit}\!\left(\bar{P}_\text{imp}(s)\right)
+  - \mathrm{logit}\!\left(\bar{P}_\text{gen}(s)\right).
+\end{equation}
+This is more stable when the number of pairs per subject is small, because a single extreme pair score does not dominate the logit.
+
+Table~\ref{tab:cold_variants} compares the three formulations under the cold-start threat model.
+
+\begin{table}[htbp]
+\centering
+\caption{Cold-start LiRA results by delta variant. Simple-$\delta$ shown for reference.}
+\label{tab:cold_variants}
+\begin{tabular}{llrrrr}
+\toprule
+Config & Metric & Simple-$\delta$ & Cold-raw & Cold-lf & Cold-mf \\
+\midrule
+\multirow{2}{*}{whuGAIT}
+  & AUC         & \whuGAITSimplDAUC   & \whuGAITColdLiraRawAUC  & \whuGAITColdLiraLfAUC  & \whuGAITColdLiraMfAUC  \\
+  & TPR at 10\% FPR & \whuGAITSimplDTPRten & \whuGAITColdLiraRawTPRten & \whuGAITColdLiraLfTPRten & \whuGAITColdLiraMfTPRten \\
+\multirow{2}{*}{UCI-HAR}
+  & AUC         & \uciharSimplDAUC    & \uciharColdLiraRawAUC   & \uciharColdLiraLfAUC   & \uciharColdLiraMfAUC   \\
+  & TPR at 10\% FPR & \uciharSimplDTPRten  & \uciharColdLiraRawTPRten  & \uciharColdLiraLfTPRten  & \uciharColdLiraMfTPRten  \\
+\multirow{2}{*}{WISDM}
+  & AUC         & \wisdmSimplDAUC     & \wisdmColdLiraRawAUC    & \wisdmColdLiraLfAUC    & \wisdmColdLiraMfAUC    \\
+  & TPR at 10\% FPR & \wisdmSimplDTPRten   & \wisdmColdLiraRawTPRten   & \wisdmColdLiraLfTPRten   & \wisdmColdLiraMfTPRten   \\
+\multirow{2}{*}{Combined}
+  & AUC         & \combinedSimplDAUC  & \combinedColdLiraRawAUC & \combinedColdLiraLfAUC & \combinedColdLiraMfAUC \\
+  & TPR at 10\% FPR & \combinedSimplDTPRten & \combinedColdLiraRawTPRten & \combinedColdLiraLfTPRten & \combinedColdLiraMfTPRten \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Raw and mean-first perform similarly across datasets. Logit-first is generally weaker, possibly because gait pair scores cluster near 0 and 1 more than classification confidences do, making the per-pair logit numerically unstable for a larger fraction of pairs. Figure~\ref{fig:cold_variants} shows the three formulations side by side.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{analysis/mia_nb05c_cold_variants.png}
+  \caption{Cold-start LiRA AUC by delta variant (raw, logit-first, mean-first)
+           across all four configurations. Raw and mean-first track closely;
+           logit-first underperforms on the combined run.}
+  \label{fig:cold_variants}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Signal Disentanglement}
+\label{sec:mia_signal}
+
+\subsection{Motivation and Design}
+\label{ssec:mia_signal_design}
+
+The experiments in the preceding sections train both the CNN encoder and the authentication LSTM on the same subject pool, so any measured membership signal could originate from either component. The CNN may have memorised the gait representations of its training subjects during classification pre-training; the LSTM may have fitted the pair-score distribution of its own training subjects during authentication training. These two contributions are inseparable in the standard pipeline.
+
+To disentangle them, the pipeline is re-run on the \texttt{whuGAIT\_signal} variant, which partitions the 60 available subjects into three non-overlapping groups before any training:
+
+\begin{itemize}
+  \item \textbf{Group~A} (subjects 21–40): used to train the CNN encoder, but
+    excluded from authentication training. Their gait representations are
+    shaped by the CNN's classification objective.
+  \item \textbf{Group~B} (subjects 41–60): excluded from CNN training, but
+    used to train the authentication LSTM. The CNN has never seen their gait,
+    so their CNN embeddings are generic; the LSTM has fitted their pair scores
+    directly.
+  \item \textbf{Group~C} (subjects 1–20): held out of both training phases.
+    They serve as the non-member baseline.
+\end{itemize}
+
+Running the MIA attack with Group~B as the member class and Group~C as the non-member baseline isolates the authentication LSTM's memorisation signal, because the CNN treats both groups equally. Running it with Group~A as the member class and Group~C as the baseline isolates the CNN encoder's contribution, because the LSTM has not been trained on either group.
+
+\subsection{Results}
+\label{ssec:mia_signal_results}
+
+Table~\ref{tab:signal_mia} reports the MIA AUC for Group~A (CNN signal) and Group~B (LSTM signal), each measured against the Group~C baseline, under the simple-delta and cold-start LiRA attacks.
+
+\begin{table}[htbp]
+\centering
+\caption{Signal disentanglement MIA AUC. Group~B (LSTM members) and Group~A (CNN members).}
+\label{tab:signal_mia}
+\begin{tabular}{lrr}
+\toprule
+Attack & Group~B (LSTM) & Group~A (CNN) \\
+\midrule
+Simple-$\delta$    & \signalMiaAUCBvsC    & \signalMiaAUCAvsC \\
+LiRA cold-start    & \signalMiaAUCBvsCCold & \signalMiaAUCAvsCCold \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both groups produce above-chance AUC, confirming that each component independently leaks membership information. The LSTM signal (Group~B) is modestly stronger than the CNN signal (Group~A) under simple-delta (\signalMiaAUCBvsC{} vs \signalMiaAUCAvsC{}), but the gap is small. Under cold-start LiRA the two are essentially equal (\signalMiaAUCBvsCCold{} vs
+\signalMiaAUCAvsCCold{}), suggesting that neither component dominates when the
+attack is calibrated against an OUT distribution.
+
+The authentication model's performance per group mirrors this pattern: the model achieves AUC of \signalAuthModelAUCB{} on Group~B pairs, \signalAuthModelAUCA{} on Group~A pairs, and \signalAuthModelAUCC{} on Group~C pairs. The fact that Group~A sits above the held-out baseline despite the LSTM never having trained on their pairs shows that the CNN encoder's prior representation carries a measurable advantage for the authentication head.
+
+Figures~\ref{fig:signal_auc_bar} and~\ref{fig:signal_roc} show the results visually. The bar chart in Figure~\ref{fig:signal_auc_bar} shows mean percentile rank per group and attack variant: Groups~A and~B both sit above the random baseline (0.33), while Group~C falls below or near it. Figure~\ref{fig:signal_roc} shows the ROC curves for Group~B (LSTM signal) and Group~A (CNN signal) across all four attack variants, each using Group~C as the non-member baseline.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{analysis/signal_mia_auc_per_group.png}
+  \caption{Mean percentile rank of MIA attack score by subject group and attack
+           variant. Higher rank means the attack places the group closer to the
+           member end of the score distribution. Group~C (held-out) sits near
+           the random baseline of 0.33.}
+  \label{fig:signal_auc_bar}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{analysis/signal_roc_per_group.png}
+  \caption{MIA ROC curves for the signal disentanglement experiment. Left:
+           Group~B (LSTM members) scored against the Group~C held-out baseline,
+           isolating the authentication LSTM's contribution. Right: Group~A
+           (CNN members) against the same baseline, isolating the CNN encoder's
+           contribution.}
+  \label{fig:signal_roc}
+\end{figure}

@@ -52,13 +52,15 @@ All lines marked `# <<< RUNNER INJECTS THIS` in a notebook cell are overwritten 
 | Notebook | Dataset |
 |----------|---------|
 | `01_explore_datasets.ipynb` | whuGAIT |
+| `01_explore_whuGAIT_signal.ipynb` | whuGAIT analysis |
 | `01_explore_ucihar.ipynb` | ucihar |
 | `01_explore_wisdm.ipynb` | wisdm |
 | `01_explore_combined.ipynb` | combined |
 
 **Writes:** `artifacts/{ds}/subject_split.json`, `artifacts/{ds}/auth_pairs.npz`
 
-The train/held-out split has to happen before anything else, because every downstream notebook assumes a fixed membership ground truth. The main output is the authentication pair inventory: balanced same-person and different-person window pairs, with subject attribution tracked for both windows. For `combined`, training subjects come from whuGAIT; test subjects are held-out ucihar and wisdm subjects that the encoder has never seen.
+The train/held-out split has to happen before anything else, because every downstream notebook assumes a fixed membership ground truth. The main output is the authentication pair inventory: balanced same-person and different-person window pairs, with subject attribution tracked for both windows. For `combined`, training subjects come from whuGAIT, ucihar and wisdm; test subjects are held-out ucihar and wisdm subjects that the encoder has never seen.
+The whuGAIT analysis utilize the whuGAIT dataset to explore the contribution of the CNN and the authenticator to the MIA attack.
 
 ---
 
@@ -68,7 +70,7 @@ The train/held-out split has to happen before anything else, because every downs
 **Writes:** `checkpoints/{ds}/cnn_encoder.pt`, `checkpoints/{ds}/cnn_encoder_meta.json`  
 **Injected:** `DATASET`, `ENCODER_DATASET`, `CNN_EPOCHS`
 
-Trains the whuGAIT CNN as a 98-class subject identifier. The useful part is the intermediate representations, not the classification head; training as an identification task turns out to produce embeddings that discriminate subjects well enough for the downstream authenticator. For cross-dataset runs where `encoder_dataset` is set, the checkpoint from the source dataset is loaded and no training occurs here.
+Trains the whuGAIT CNN as a subject identifier. The useful part is the intermediate representations, not the classification head; training as an identification task turns out to produce embeddings that discriminate subjects well enough for the downstream authenticator. For cross-dataset runs where `encoder_dataset` is set, the checkpoint from the source dataset is loaded and no training occurs here. This is to test whether a CNN trained on whuGAIT subjects generalises as an encoder
 
 ---
 
@@ -78,7 +80,7 @@ Trains the whuGAIT CNN as a 98-class subject identifier. The useful part is the 
 **Writes:** `checkpoints/{ds}/auth_model.pt`, `artifacts/{ds}/auth_norm_stats.npz`  
 **Injected:** `DATASET`, `AUTH_EPOCHS`, `AUTH_LR`, `AUTH_DROPOUT`
 
-The encoder stays frozen here deliberately: we're investigating what the CNN's representations leak, so letting the authenticator fine-tune the encoder during training would muddy what the MIA is actually attacking. The normalisation stats computed from the train split are saved here and reused by NB04 through NB06, ensuring a consistent scale across the whole pipeline.
+The encoder stays frozen here deliberately: we're investigating what the CNN's representations leak, so letting the authenticator fine-tune the encoder during training would muddy the CNN signal. The normalisation stats computed from the train split are saved here and reused by NB04 through NB06, ensuring a consistent scale across the whole pipeline.
 
 ---
 
@@ -154,15 +156,6 @@ Checks whether the attack is doing something physically reasonable or just explo
 
 ---
 
-### NB07: Combined cross-eval (`07_combined_cross_eval.ipynb`)
-
-**Reads:** checkpoints and artifacts from multiple datasets  
-**Writes:** `results/analysis/`
-
-Deep-dive for the combined run: breaks down authenticator performance by source dataset (ucihar vs wisdm test subjects) rather than reporting combined numbers. Not part of the standard pipeline runs; run it manually after the combined pipeline if you need per-dataset breakdown.
-
----
-
 ## Analysis notebooks (`analysis/`)
 
 Run these after the pipeline finishes for all datasets. Each one loads results from `artifacts/`, computes cross-dataset comparisons, and writes LaTeX macros. Open from the `analysis/` directory or run directly in Jupyter.
@@ -181,6 +174,10 @@ Summarises the PGD attack: budget ratio, combo ASR, and number of resistant pair
 
 ### `compare_combined.ipynb`
 Breaks down the combined run by source dataset (ucihar vs wisdm test subjects separately), shows epoch curves, and checks MIA and evasion results where available.
+
+### `signal_disentanglement.ipynb`
+Specific to the `whuGAIT_signal` run. Produces three figures: authenticator AUC and accuracy per subject group (A/B/C), MIA attack AUC per pairwise group comparison across all four attack variants, and ROC curves for each comparison. Run automatically as the last step of the `whuGAIT_signal` pipeline.  
+**Writes:** `latex/generated/signal_disentanglement_metrics.tex`, `results/analysis/signal_*.png`
 
 ---
 

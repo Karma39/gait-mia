@@ -12,7 +12,7 @@ Any machine learning model trained on sensitive personal data carries a general 
 
 The layered architecture raises a further question that is specific to the two-component pipelines. Both the CNN encoder and the LSTM authentication head are trained on the same subjects in the standard configuration, so any memorisation is distributed across both components. It is therefore not clear how much of the observed membership signal, if any, comes from the encoder versus the authentication head. The two components have different architectures, different training objectives, and different amounts of exposure to each subject's data, so their individual contributions may differ substantially and may call for different mitigations. Separating them requires an experimental design in which the two components are trained on non-overlapping sets of subjects, which the signal disentanglement experiment in this thesis provides.
 
-Beyond membership inference, a deployed authentication system faces a second threat: an adversary who wishes to be accepted as a legitimate user. Projected gradient descent (PGD) attacks can perturb an impostor's gait signal to minimise the system's output distance to a target member, potentially crossing the decision boundary with a perturbation small enough to remain within the natural variation of human gait. Whether such perturbations are practically achievable, and whether they leave detectable spectral artefacts, is an open question for gait-based systems that has received less attention than the equivalent question in image-domain authentication.
+Beyond membership inference, a deployed authentication system faces a second question: how robust is its decision boundary? A small perturbation added to an impostor's probe signal, optimised via projected gradient descent (PGD), may be sufficient to push the model's output across the acceptance threshold. Measuring how large that perturbation needs to be, relative to the natural trial-to-trial variability of the signal, reveals how close the boundary sits to naturally occurring gait. Whether such perturbations are practically achievable, and whether they leave detectable spectral artefacts, has received less attention for gait-based systems than for image-domain authentication.
 
 \section{Problem Statement}
 \label{sec:intro_problem}
@@ -33,13 +33,13 @@ The main contributions of this thesis are as follows.
 \begin{itemize}
 
   \item \textbf{Membership inference evaluation across multiple datasets and threat models.}
-  The simple-delta attack and three LiRA variants (grey-box, warm-start black-box, cold-start black-box) are evaluated on four pipeline configurations: whuGAIT, UCI-HAR, WISDM, and a combined cross-dataset run. Cold-start consistently outperforms warm-start across all datasets, because random initialisation gives each shadow model an independent starting point and produces more diverse OUT distributions for the LiRA test. The delta variant comparison (raw, logit-first, mean-first) is therefore restricted to cold-start. The evaluation surfaces a pair-correlation confound specific to the whuGAIT Dataset~\#5 pair construction that inverts the grey-box signal, and identifies cold-start LiRA as the least affected variant.
+  The simple-delta attack and three LiRA variants (grey-box, warm-start black-box, cold-start black-box) are evaluated on four pipeline configurations: whuGAIT, UCI-HAR, WISDM, and a combined cross-dataset run. Cold-start consistently outperforms warm-start across all datasets, because random initialisation gives each shadow model an independent starting point and produces more diverse OUT distributions for the LiRA test. The delta variant comparison (raw, logit-first, mean-first) is therefore restricted to cold-start. The evaluation also identifies a grey-box signal inversion on whuGAIT whose cause is not fully established, and confirms cold-start LiRA as the least affected variant.
 
   \item \textbf{CNN vs authenticator memorisation signal disentanglement.}
   A three-group subject split is proposed in which the CNN encoder and the LSTM authenticator are trained on non-overlapping subjects within the whuGAIT dataset. Scoring all groups with a common authenticator allows the CNN's memorisation contribution to be separated from the LSTM's contribution. The experiment shows that both components produce signal above the held-out baseline, with the authenticator's contribution slightly exceeding the CNN's for simple-delta and cold-start LiRA, while the gap between the two narrows to near zero for the grey-box attack.
 
   \item \textbf{Evasion attack evaluation.}
-  A PGD impersonation attack is conducted on all four dataset configurations. The minimum perturbation budget required for a successful attack is compared against the median intra-subject gait variation, providing a naturalness baseline. Spectral analysis of the successful perturbations is included for the whuGAIT configuration.
+  A PGD evasion attack is conducted on all four dataset configurations. The minimum perturbation budget required for a successful attack is compared against the median intra-subject gait variation, providing a naturalness baseline. Spectral analysis of the successful perturbations is included for the whuGAIT configuration.
 
 \end{itemize}
 
@@ -52,9 +52,7 @@ Chapter~\ref{ch:related} surveys prior work on gait-based authentication, member
 
 Chapter~\ref{ch:system} describes the three datasets used in the evaluation, the subject split and pair construction procedure, the CNN encoder and authentication model architectures, and the four experimental configurations.
 
-Chapter~\ref{ch:mia} presents the membership inference experiments: the simple-delta baseline, the LiRA shadow model attack in its three threat model variants, the delta formulation comparison, and a discussion of the whuGAIT pair-correlation confound.
-
-Chapter~\ref{ch:signal} presents the signal disentanglement experiment: the three-group design, the authentication model performance per group, and the per-group membership signal comparison across attack variants.
+Chapter~\ref{ch:mia} presents the membership inference experiments: the simple-delta baseline, the LiRA shadow model attack in its three threat model variants, the delta formulation comparison, and a discussion of the grey-box signal inversion observed on whuGAIT. The chapter also presents the signal disentanglement experiment (Section~\ref{sec:mia_signal}): the three-group design, the authentication model performance per group, and the per-group membership signal comparison across attack variants.
 
 Chapter~\ref{ch:evasion} presents the evasion attack: the PGD formulation, the epsilon budget estimation procedure, and the attack success rate and budget ratio results across all configurations, with a spectral analysis of the perturbations.
 

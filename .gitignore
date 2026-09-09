@@ -18,14 +18,19 @@ logs/
 results/
 
 # ── LaTeX build artifacts (all subdirectories) ────────────────────────────────
-latex/generated/
 latex/**/*.aux
+latex/**/*.bbl
+latex/**/*.blg
 latex/**/*.fdb_latexmk
 latex/**/*.fls
+latex/**/*.lof
 latex/**/*.log
+latex/**/*.lot
 latex/**/*.out
 latex/**/*.pdf
 latex/**/*.synctex.gz
+latex/**/*.toc
+latex/**/texput.log
 
 # ── Python cache ──────────────────────────────────────────────────────────────
 __pycache__/

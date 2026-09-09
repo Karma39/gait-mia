@@ -1,4 +1,4 @@
-\documentclass[10pt,twocolumn]{IEEEtran}
+\documentclass[10pt,onecolumn]{IEEEtran}
 
 % ── packages ──────────────────────────────────────────────────────────────────
 \usepackage[T1]{fontenc}
@@ -82,6 +82,16 @@
 \providecommand{\combinedColdLiraRawAUC}{\tbd}
 \providecommand{\combinedColdLiraLfAUC}{\tbd}
 \providecommand{\combinedColdLiraMfAUC}{\tbd}
+% ── signal disentanglement ──
+\providecommand{\signalAuthModelAUCB}{\tbd}
+\providecommand{\signalAuthModelAUCA}{\tbd}
+\providecommand{\signalAuthModelAUCC}{\tbd}
+\providecommand{\signalMiaAUCBvsC}{\tbd}
+\providecommand{\signalMiaAUCAvsC}{\tbd}
+\providecommand{\signalMiaAUCBvsCLira}{\tbd}
+\providecommand{\signalMiaAUCAvsCLira}{\tbd}
+\providecommand{\signalMiaAUCBvsCCold}{\tbd}
+\providecommand{\signalMiaAUCAvsCCold}{\tbd}
 \providecommand{\whuGAITComboASR}{\tbd}
 \providecommand{\whuGAITBudgetRatio}{\tbd}
 \providecommand{\whuGAITNCombos}{\tbd}
@@ -112,6 +122,8 @@
 \input{../generated/compare_evasion_ucihar_metrics}
 \input{../generated/compare_evasion_wisdm_metrics}
 \input{../generated/compare_evasion_combined_metrics}
+\IfFileExists{../generated/signal_disentanglement_metrics.tex}%
+  {\input{../generated/signal_disentanglement_metrics}}{}
 
 % ── metadata ──────────────────────────────────────────────────────────────────
 \title{\large\textbf{Gait MIA Pipeline -- Results Summary}\\[2pt]
@@ -125,20 +137,12 @@
 \maketitle
 \thispagestyle{plain}
 
-\begin{abstract}
-This note collects numerical results from the gait-based membership inference
-(MIA) pipeline across four configurations: within-dataset runs on whuGAIT,
-UCI-HAR, and WISDM, and a cross-dataset run (Combined) that reuses the whuGAIT
-CNN encoder with an LSTM authenticator retrained on subjects from all three
-sources. Values are reported without selective filtering. Observations are
-tentative and subject to revision as experimental conditions change.
-\end{abstract}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Experimental Setup}
 % ══════════════════════════════════════════════════════════════════════════════
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{Subject counts and authentication pair volumes (quick-mode).}
 \label{tab:setup}
@@ -170,7 +174,7 @@ separately before concatenation.
 \label{sec:cnn}
 % ══════════════════════════════════════════════════════════════════════════════
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{CNN identification accuracy (top-1, test split, 2 epochs).}
 \label{tab:cnn}
@@ -192,7 +196,7 @@ Combined & \na                & frozen encoder \\
 \label{sec:auth}
 % ══════════════════════════════════════════════════════════════════════════════
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{CNN+LSTM authenticator on held-out test pairs. Sep $=
 \bar{P}_{\text{imp}} - \bar{P}_{\text{gen}}$. Overfit $=$ train acc $-$ test
@@ -217,7 +221,7 @@ indicate the LSTM is memorising subject-level patterns from training.
 Fig.~\ref{fig:overfitting} shows per-epoch accuracy and loss curves for each
 configuration; the gap between train and test tracks overfitting directly.
 
-\begin{figure*}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{../../results/analysis/models_overfitting_curves.png}
 \caption{Authentication model (CNN+LSTM) training curves per epoch. Top row:
@@ -225,7 +229,7 @@ configuration; the gap between train and test tracks overfitting directly.
          Vertical dotted line marks the best-checkpoint epoch. Quick-mode uses
          2 epochs so curves have not necessarily converged.}
 \label{fig:overfitting}
-\end{figure*}
+\end{figure}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Membership Inference}
@@ -242,15 +246,15 @@ $P(\text{different person})$ over impostor and genuine pairs for subject~$s$.
 Fig.~\ref{fig:deltas} shows the per-subject distributions; a larger horizontal
 separation indicates a stronger signal.
 
-\begin{figure*}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{../../results/analysis/mia_nb04_deltas.png}
 \caption{Per-subject delta distributions for members (blue) and non-members
          (orange) across all four configurations.}
 \label{fig:deltas}
-\end{figure*}
+\end{figure}
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{Simple-delta MIA. $\Delta$ gap $= \bar\delta_M - \bar\delta_{NM}$.}
 \label{tab:mia-signal}
@@ -273,8 +277,13 @@ Table~\ref{tab:lira-threat} compares raw-delta AUC across three threat models.
 Grey-box initialises shadows from the actual target weights; warm uses an
 independently trained surrogate; cold starts from random Xavier init. All use
 member-aware splits ($K{=}4$ quick-mode shadows).
+Cold-start consistently outperforms warm across all datasets: starting from
+independent random weights gives each shadow a different trajectory through
+weight space, producing more diverse OUT-of-bag delta distributions and a
+sharper LiRA test. Warm shadows all begin from the same surrogate checkpoint
+and converge to similar solutions, reducing that diversity.
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{LiRA AUC (raw-delta) by threat model. ``--'' indicates no valid
          estimates ($K{=}4 < 5$ required per subject).}
@@ -294,15 +303,17 @@ Combined & \combinedSimplDAUC  & \combinedGreyLiraRawAUC & \combinedWarmLiraRawA
 
 \subsection{LiRA delta variant comparison}
 
-Three delta formulations are evaluated for the cold-start threat model, which
-provides the cleanest comparison as it requires no knowledge of the target:
+Because warm-start adds no benefit over cold across any dataset, the delta
+variant comparison is restricted to cold-start, which also provides the
+cleanest baseline as it requires no knowledge of the target model or its
+training data:
 \begin{align*}
 \delta_\text{raw} &= \bar{p} - \bar{q}, \\
 \delta_\text{lf}  &= \overline{\mathrm{logit}(p)} - \overline{\mathrm{logit}(q)}, \\
 \delta_\text{mf}  &= \mathrm{logit}(\bar{p}) - \mathrm{logit}(\bar{q}).
 \end{align*}
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{Cold-start LiRA AUC by delta variant. Simple-D shown for reference.}
 \label{tab:lira-variants}
@@ -323,7 +334,7 @@ Fig.~\ref{fig:roc} shows ROC curves comparing Simple-delta, grey-box, and
 cold-start LiRA across all configurations. The per-dataset subplots make the
 threat-model comparison and the whuGAIT inversion effect directly visible.
 
-\begin{figure*}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{../../results/analysis/mia_roc_comparison.png}
 \caption{MIA ROC curves per configuration (quick-mode, $K{=}4$ shadows).
@@ -333,14 +344,115 @@ threat-model comparison and the whuGAIT inversion effect directly visible.
          grey-box curves fall below the diagonal due to the D5 pair-correlation
          confound.}
 \label{fig:roc}
-\end{figure*}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Signal Disentanglement}
+\label{sec:signal}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The standard pipeline trains both the CNN encoder and the LSTM authenticator
+on the same subject pool, so it is impossible to tell whether the membership
+signal comes from CNN memorisation, LSTM memorisation, or both. The
+\texttt{whuGAIT\_signal} run separates the two by assigning 60 whuGAIT
+subjects to three non-overlapping groups: CNN training only (A, subjects
+21--40), authenticator training only (B, subjects 41--60), and held-out
+baseline (C, subjects 1--20). All pairs are built from Dataset~\#1 to avoid
+the D5 pair-correlation confound.
+
+\sect{Auth model per group}
+Evaluating the trained authenticator on pairs from each group shows how much
+the model's discriminative ability depends on training membership. Group~B
+subjects (authenticator members) are expected to show the highest per-pair
+AUC, because the LSTM has fitted their gait patterns directly. Group~A
+subjects (CNN members, auth non-members) provide a test of whether the CNN
+representation carries any benefit when the LSTM has not seen the subject.
+Group~C subjects (held-out) serve as the lower bound.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+Group & Subjects & Auth AUC \\
+\midrule
+A (CNN only)   & 21--40 & \signalAuthModelAUCA \\
+B (auth only)  & 41--60 & \signalAuthModelAUCB \\
+C (held-out)   &  1--20 & \signalAuthModelAUCC \\
+\bottomrule
+\end{tabular}
+\caption{Auth model AUC per group. B is in-sample for the LSTM; A and C are
+         both out-of-distribution for the LSTM.}
+\label{tab:signal_auth}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{../../results/analysis/signal_auth_performance.png}
+\caption{Authenticator AUC (left) and accuracy (right) per subject group.
+         Group~B (auth-trained) and Group~A (CNN-trained) are both out-of-sample
+         for the standard test split; Group~C is the held-out baseline.}
+\label{fig:signal_auth}
+\end{figure}
+
+\sect{MIA attack per group}
+The two real attack settings are B~vs~C and A~vs~C. B~vs~C measures the
+authenticator signal: how well the attack identifies auth members relative to
+subjects neither model saw. A~vs~C measures the CNN signal: how well the
+attack identifies CNN-trained subjects using an authenticator that never saw
+them. Fig.~\ref{fig:signal_mia} shows mean percentile rank per group across
+all 60 subjects: a bar near 0.33 means the attack scores that group at random;
+a bar near 1 means the attack consistently places those subjects at the top.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{../../results/analysis/signal_mia_auc_per_group.png}
+\caption{Mean attack-score percentile rank per subject group (A, B, C) and
+         attack variant. Dashed line at 0.33 is the expected value under a
+         random attack. Group~B (authenticator-trained) and Group~A
+         (CNN-trained) both rank above the baseline Group~C.}
+\label{fig:signal_mia}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Variant & B vs C (auth signal) & A vs C (CNN signal) \\
+\midrule
+Simple-$\delta$  & \signalMiaAUCBvsC     & \signalMiaAUCAvsC     \\
+LiRA-raw (grey)  & \signalMiaAUCBvsCLira & \signalMiaAUCAvsCLira \\
+BB-cold          & \signalMiaAUCBvsCCold & \signalMiaAUCAvsCCold \\
+\bottomrule
+\end{tabular}
+\caption{MIA AUC per group. B~vs~C: attack uses auth-trained subjects as
+         members, held-out as non-members. A~vs~C: CNN-trained subjects as
+         members, held-out as non-members.}
+\label{tab:signal_mia}
+\end{table}
+
+Both trained groups show signal above the held-out baseline across all
+variants. The gap between B~vs~C and A~vs~C ($\approx0.02$ for simple-delta)
+is small, suggesting the CNN and authenticator contribute comparable
+memorisation signals. Fig.~\ref{fig:signal_roc} shows the full ROC for both
+settings.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{../../results/analysis/signal_roc_per_group.png}
+\caption{MIA ROC curves for the two real attack settings: B~vs~C
+         (authenticator members vs held-out, left) and A~vs~C (CNN members
+         vs held-out, right). All four attack variants are shown per panel.}
+\label{fig:signal_roc}
+\end{figure}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Evasion Attack}
 \label{sec:evasion}
 % ══════════════════════════════════════════════════════════════════════════════
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{PGD impersonation attack on test impostor pairs. Budget ratio:
          $\bar\varepsilon_{\min}/\varepsilon_{\text{target}}$ where
@@ -376,33 +488,33 @@ in the gait frequency band (0--5\,Hz) and a Mann-Whitney test on the
 high-frequency ratio gives $p{=}0.82$, indicating no detectable high-frequency
 artefact under this detector.
 
-\begin{figure*}[t]
+\begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{../../results/analysis/evasion_summary_bars.png}
+\includegraphics[width=0.82\textwidth]{../../results/analysis/evasion_summary_bars.png}
 \caption{Evasion attack summary. Left: budget ratio
          ($\bar\varepsilon_{\min}/\varepsilon_{\text{target}}$) per dataset;
          values below 1.0 indicate the attack stays within natural gait variation.
          Right: attack success rate (ASR) at the combo level.}
 \label{fig:evasion-summary}
-\end{figure*}
+\end{figure}
 
-\begin{figure*}[t]
+\begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{../../results/analysis/evasion_eps_distribution.png}
-\caption{Distribution of minimum perturbation budgets $\varepsilon_{\min}$
-         across successfully attacked pairs. Narrower distributions indicate
-         more consistent attack difficulty across the test set.}
-\label{fig:evasion-eps}
-\end{figure*}
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{../../results/analysis/evasion_train_vs_test.png}
-\caption{Train-split vs test-split evasion results. Training pairs are generally
-         harder to attack (fewer epochs, different pair structure), so the
-         train-split ASR and budget ratio tend to differ from the test-split.}
-\label{fig:evasion-traintest}
-\end{figure*}
+\begin{minipage}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../results/analysis/evasion_eps_distribution.png}
+  \caption{Distribution of minimum perturbation budgets $\varepsilon_{\min}$
+           across successfully attacked pairs.}
+  \label{fig:evasion-eps}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../results/analysis/evasion_train_vs_test.png}
+  \caption{Train-split vs test-split evasion results. The train-split ASR and
+           budget ratio tend to differ from the test-split.}
+  \label{fig:evasion-traintest}
+\end{minipage}
+\end{figure}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Summary Observations}
@@ -414,8 +526,11 @@ artefact under this detector.
   \item The D5 pair-correlation confound causes grey-box and warm-start LiRA
         to invert for whuGAIT (AUC $< 0.5$); cold-start is less affected.
         The effect is visible in the ROC curves (Fig.~\ref{fig:roc}).
-  \item Cold-start LiRA tends to outperform warm-start across datasets, a
-        pattern that may indicate overfitting in the surrogate training phase.
+  \item Cold-start LiRA consistently outperforms warm-start across all datasets
+        and delta variants. Starting from random weights gives each shadow model
+        an independent trajectory, producing more diverse OUT distributions and
+        a sharper likelihood ratio test. Warm-start shadows converge from the
+        same surrogate checkpoint and therefore produce less diverse estimates.
   \item Among the delta variants, raw and mean-first perform similarly for
         cold-start; logit-first is generally weaker.
   \item The Combined run shows the largest authentication overfit gap

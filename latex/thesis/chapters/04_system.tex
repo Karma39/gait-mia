@@ -1,0 +1,170 @@
+\chapter{System Model and Datasets}
+\label{ch:system}
+
+The pipeline has two sequential learning stages: a CNN encoder trained to classify subjects by their gait, and an LSTM authentication head that scores pairs of gait windows. The CNN is trained first and then frozen; only the LSTM is updated during authentication training. Three inertial datasets are used, each with its own partition of subjects into members and non-members, and pair inventories are constructed to keep the two groups strictly separate.
+
+Because both components are trained on the same subjects in the standard configurations, it is not possible to attribute the observed membership signal to one or the other. To address this, a dedicated experiment trains the CNN and the LSTM on entirely disjoint sets of subjects within whuGAIT, so that the privacy leakage of each component can be measured independently. This experiment is a standalone setup described in Section~\ref{ssec:sys_signal} and analysed in Section~\ref{sec:mia_signal}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Datasets}
+\label{sec:sys_datasets}
+
+Three publicly available inertial datasets are used: whuGAIT, UCI-HAR, and WISDM. All three provide accelerometer and gyroscope recordings of walking collected with smartphones or waist-mounted devices. They differ in sampling rate, collection protocol, number of subjects, and the activities recorded. Table~\ref{tab:datasets} summarises their main properties.
+
+\begin{table}[htbp]
+\centering
+\caption{Dataset summary.}
+\label{tab:datasets}
+\begin{tabular}{lrrrrl}
+\toprule
+Dataset  & Subjects & Sampling & Window    & Window    & Segmentation \\
+         &          & rate     & samples   & duration  & \\
+\midrule
+whuGAIT  & 118      & 50\,Hz   & 128       & 2.56\,s   & Step-based \\
+UCI-HAR  & 30       & 50\,Hz   & 128       & 2.56\,s   & Pre-segmented \\
+WISDM    & 51       & 20\,Hz   & 128       & 6.40\,s   & Sliding window (50\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{whuGAIT}
+\label{ssec:sys_whugait}
+
+The whuGAIT dataset~\cite{zou2020deep} contains recordings from 118 subjects collected in the wild: participants carried their smartphones in an unrestricted manner while walking along arbitrary paths indoors and outdoors. The device's three-axis accelerometer and three-axis gyroscope are sampled at 50\,Hz, giving six channels per timestep. Windows of 128 samples (2.56 seconds) are extracted by detecting individual steps in the raw signal and aligning windows to the detected step boundaries, which makes each window more likely to contain a complete gait cycle than a purely time-based approach.
+
+The dataset is distributed with a fixed pair inventory (Dataset \#5 in the original paper) in which same-person and different-person pairs are pre-formed from the 128-sample windows. Each entry in the inventory consists of two windows and a binary label indicating whether the two windows belong to the same person or to different people. This fixed structure is used directly in the authentication training and attack evaluation, rather than constructing pairs from scratch.
+
+\subsection{UCI-HAR}
+\label{ssec:sys_ucihar}
+
+The UCI Human Activity Recognition dataset~\cite{anguita2013human} contains recordings from 30 subjects performing six labelled activities: walking, walking upstairs, walking downstairs, sitting, standing, and lying. The device is carried on the waist at 50\,Hz. Windows of 128 samples (2.56 seconds) are pre-segmented and provided with activity labels. Only the walking activity windows are retained for the gait authentication task, as the other activities would introduce activity-level variation that is not a property of an individual's gait. The dataset provides a predefined subject-level split into 21 training subjects and 9 test subjects, which is used directly as the member/non-member partition.
+
+\subsection{WISDM}
+\label{ssec:sys_wisdm}
+
+The WISDM dataset~\cite{kwapisz2011activity} contains accelerometer and gyroscope recordings from 51 subjects using a smartphone placed in a trouser pocket, sampled at approximately 20\,Hz. Six activities are labelled; only the walking activity is retained. Because the recordings are continuous rather than pre-segmented, windows of 128 samples (6.4 seconds at 20\,Hz) are extracted with a sliding window of stride 64, giving 50\% overlap between consecutive windows. The lower sampling rate means the 128-sample windows cover a longer time interval than in the 50\,Hz datasets, capturing more gait cycles per window.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Subject Split and Pair Construction}
+\label{sec:sys_split}
+
+\subsection{Member and Non-Member Assignment}
+\label{ssec:sys_membership}
+
+For each dataset a fixed subject-level partition assigns subjects to one of two roles for the purposes of the MIA evaluation. \emph{Member} subjects are those whose data appears in the training set of at least one of the two pipeline stages: CNN identification training or authentication head training. \emph{Non-member} subjects are held out from training entirely and serve as the attack's negative class.
+
+The sizes of these partitions reflect the total number of subjects in each dataset: for whuGAIT, 98 subjects are members and 20 are non-members; for UCI-HAR, 21 are members and 9 are non-members (following the predefined dataset split); for WISDM, 40 are members and 11 are non-members.
+
+For the within-dataset configurations (whuGAIT, UCI-HAR, WISDM), the CNN encoder is trained from scratch on the member subjects of that dataset, and the authentication head is subsequently trained on the same member set. For the combined configuration, the CNN checkpoint trained on whuGAIT members is reused as a frozen encoder, and only the authentication head is trained on members pooled across all three datasets. This is discussed further in Section~\ref{sec:sys_configs}.
+
+\subsection{Authentication Pair Inventory}
+\label{ssec:sys_pairs}
+
+For the whuGAIT dataset the fixed pair inventory from the original paper (D5) is used directly. D5 is distributed as two separate directories: a training set of 66,542 pairs involving subjects 21--118 and a test set of 7,600 pairs involving subjects 1--20; the member assignment is defined to match D5's existing partition.
+
+For UCI-HAR and WISDM no pre-built pair inventory exists, so one is constructed from the raw windows. The datasets ship with a predefined subject-level train/test split that is disjoint by construction, which is used as the member/non-member partition. Pairs are then sampled independently from the two window pools: member pairs are drawn from member windows only, and non-member pairs from non-member windows only, so the two groups never share windows. Each inventory is balanced between same-person and different-person pairs to avoid class imbalance in authentication training.
+
+For the MIA attack, pair membership must be consistent with the subject membership label: a pair is a member pair if and only if both subjects in the pair are members. This \emph{member-aware} pair split ensures that the delta signal $\delta(s) = \bar{P}_\text{imp}(s) - \bar{P}_\text{gen}(s)$ is computed from pairs whose membership status is unambiguous.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{CNN Encoder}
+\label{sec:sys_cnn}
+
+\subsection{Architecture}
+\label{ssec:sys_cnn_arch}
+
+The CNN encoder follows the architecture from Zou et al.~\cite{zou2020deep}. Figure~\ref{fig:cnn_arch} shows the full layer sequence with output shapes at each stage. The input window $(B, 6, 128)$ is reshaped to $(B, 1, 6, 128)$, treating the six sensor channels as spatial height and the 128 time steps as width of a single-channel image. The first three convolutional blocks operate along the time axis only, learning temporal patterns independently per channel. The fourth block uses a $6 \times 1$ kernel that collapses all channels at once, fusing the per-channel temporal patterns into a joint representation of shape $(B, 128, 1, 16)$.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{cnn_architecture.png}
+  \caption{CNN encoder architecture (Zou et al.~\cite{zou2020deep}). Output
+           shapes are shown below each block (batch dimension omitted). The
+           dashed branch indicates the feature maps $(16, 128)$ passed to the
+           LSTM authentication head; the main path continues to the FC layer
+           used during identification pre-training.}
+  \label{fig:cnn_arch}
+\end{figure}
+
+For identification pre-training the feature map is flattened to a 2048-dimensional vector and passed through a fully connected layer to produce logits over the $N$ training subjects. For the authentication head the flattening and FC layer are bypassed: the feature map is transposed to $(B, 16, 128)$ and fed directly to the LSTM.
+
+\subsection{Training as Subject Identifier}
+\label{ssec:sys_cnn_train}
+
+For each within-dataset configuration the CNN is trained as a subject classifier on that dataset's member subjects, minimising cross-entropy loss on the per-window subject label. Training uses the Adam optimiser with a learning rate of $2.5 \times 10^{-3}$ and L2 weight decay of $1.5 \times 10^{-3}$. The CNN weights are fixed after identification training and are not updated during any subsequent stage.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Authentication Model}
+\label{sec:sys_auth}
+
+\subsection{LSTM Head and Similarity Score}
+\label{ssec:sys_lstm}
+
+The authentication model pairs the frozen CNN encoder with a trainable LSTM head, as shown in Figure~\ref{fig:auth_arch}. Both windows are encoded to $(16, 128)$ feature sequences, concatenated to $(32, 128)$, and processed by a 2-layer LSTM (hidden size 64). The last hidden state is projected through dropout and a fully connected layer to a score $P(\text{different person} \mid \mathbf{x}_1, \mathbf{x}_2) \in [0, 1]$; a pair is accepted as genuine if this score is below 0.5. The LSTM head has 83,074 trainable parameters.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{auth_architecture.png}
+  \caption{AuthModel architecture. Both windows pass through the same frozen
+           CNN encoder (weights shared). The resulting $(16,128)$ sequences
+           are concatenated and fed to a 2-layer LSTM; the last hidden state
+           is projected to a similarity score via dropout and a fully connected
+           layer.}
+  \label{fig:auth_arch}
+\end{figure}
+
+\subsection{Training Procedure}
+\label{ssec:sys_auth_train}
+
+The LSTM head is trained on the member pairs using the Adam optimiser with learning rate $2.5 \times 10^{-3}$, L2 weight decay $1.5 \times 10^{-3}$, batch size 512, and dropout rate 0.3. Training runs for 10 epochs. The CNN weights are frozen throughout; only the LSTM weights and the FC layer are updated. This keeps the two stages independent: the CNN is shaped by the identification objective, the LSTM by the pairwise comparison objective. The signal disentanglement experiment in Section~\ref{sec:mia_signal} exploits this separation to measure how much each component contributes to the membership signal.
+
+Figure~\ref{fig:training_curves} shows the per-epoch train and test accuracy and loss for the authentication head across all four experimental configurations. The dotted vertical line marks the epoch selected by early stopping. whuGAIT trains for 2 epochs before the test accuracy stagnates; UCI-HAR and the combined run stop at epochs 2 and 8 respectively; WISDM trains for the full 10 epochs with the test accuracy still improving at the end. The growing train/test gap in UCI-HAR is consistent with the relatively small member pool (21 subjects), which gives the LSTM fewer pairs to generalise from.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{analysis/models_overfitting_curves.png}
+  \caption{Per-epoch train (solid) and test (dashed) accuracy and cross-entropy
+           loss for the authentication head across all four configurations. The
+           dotted vertical line marks the selected checkpoint epoch.}
+  \label{fig:training_curves}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Experimental Configurations}
+\label{sec:sys_configs}
+
+Five configurations are evaluated. The first four differ in which dataset the CNN and authentication head are trained on and which subjects form the held-out test set. The fifth is the signal disentanglement configuration, in which the CNN and LSTM are trained on disjoint subject groups within whuGAIT to isolate each component's contribution to the membership signal (Section~\ref{sec:mia_signal}).
+
+\subsection{Within-Dataset Runs}
+\label{ssec:sys_within}
+
+The three within-dataset configurations each use a single dataset for all stages of the pipeline.
+
+\textbf{whuGAIT.} The CNN is trained for identification on the 98 member subjects. The authentication head is then trained on pairs drawn from the same 98 subjects. The 20 non-member subjects serve as the held-out class for both the authentication evaluation and the MIA attack.
+
+\textbf{UCI-HAR.} The CNN is trained from scratch on the 21 UCI-HAR member subjects for identification, then frozen. The authentication head is trained on pairs from the same 21 subjects. The 9 held-out subjects are the non-member class.
+
+\textbf{WISDM.} The CNN is trained from scratch on the 40 WISDM member subjects for identification, then frozen. The authentication head is trained on pairs from the same 40 subjects, with 11 subjects held out.
+
+\subsection{Cross-Dataset (Combined) Run}
+\label{ssec:sys_combined}
+
+The combined configuration assembles a training set from all three datasets: the 98 whuGAIT members, the 21 UCI-HAR members, and the 40 WISDM members, giving 159 training subjects in total. The whuGAIT CNN encoder is used and kept frozen. The authentication head is trained on pairs from all 159 subjects simultaneously. The resulting training inventory contains 72,000 pairs: 60,000 from whuGAIT and 6,000 each from UCI-HAR and WISDM. The imbalance reflects the larger subject count of whuGAIT, since pairs are sampled proportionally per subject.
+
+The held-out test set consists of the 9 UCI-HAR non-members and the 11 WISDM non-members (20 subjects total), identified by a numeric offset that encodes their source dataset. No whuGAIT non-members are included in the combined test set, because the whuGAIT CNN was pre-trained on the whuGAIT members and the MIA signal for whuGAIT subjects is analysed separately in the within-dataset run.
+
+\subsection{Signal Disentanglement Run}
+\label{ssec:sys_signal}
+
+The signal disentanglement configuration is a fifth pipeline run on whuGAIT using 60 of the 118 available subjects. The experiment requires three non-overlapping groups of equal size to ensure that any difference in measured membership signal does not depend on the training set size: Group C is fixed at subjects 1--20, which is the existing D5 non-member partition, so Groups A and B are also set to 20 subjects each to ensure that the CNN and the LSTM are trained on the same amount of data. The remaining 58 whuGAIT subjects are not used in this configuration. The three groups are defined as follows, so that the CNN encoder and the LSTM authentication head are trained on entirely disjoint populations:
+
+\begin{itemize}
+  \item \textbf{Group A (subjects 21--40):} used only for CNN identification
+    training. The authentication head never sees pairs from these subjects.
+  \item \textbf{Group B (subjects 41--60):} used only for authentication head
+    training. The CNN is not trained to classify these subjects.
+  \item \textbf{Group C (subjects 1--20):} held out from both training stages
+    and used as the non-member baseline for the MIA attack.
+\end{itemize}
+
+Because the CNN and LSTM are trained on different subjects, the membership signal produced by each component is anchored to a different population. Comparing the attack's ability to distinguish Group A from Group C isolates the CNN's contribution, while comparing Group B against Group C isolates the authenticator's contribution. The two comparisons are evaluated on the same model and the same held-out group, making them directly comparable. The results are analysed in Section~\ref{sec:mia_signal}.

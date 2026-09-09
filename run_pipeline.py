@@ -8,7 +8,7 @@ Usage:
     python run_pipeline.py                   # all configured runs
     python run_pipeline.py whuGAIT           # single dataset
     python run_pipeline.py whuGAIT ucihar    # specific datasets
-    python run_pipeline.py --quick whuGAIT   # smoke-test (few epochs, small samples)
+    python run_pipeline.py --quick whuGAIT   # quick-test (few epochs, small samples)
     python run_pipeline.py --list            # show available runs
     python run_pipeline.py --dry-run         # show what would run
     python run_pipeline.py --from 05b_mia_attack.ipynb whuGAIT  # resume mid-pipeline
@@ -47,10 +47,11 @@ EVASION = [
 ]
 
 EXPLORE = {
-    'whuGAIT':  ['01_explore_datasets.ipynb'],
-    'ucihar':   ['01_explore_ucihar.ipynb'],
-    'wisdm':    ['01_explore_wisdm.ipynb'],
-    'combined': ['01_explore_combined.ipynb'],
+    'whuGAIT':        ['01_explore_datasets.ipynb'],
+    'ucihar':         ['01_explore_ucihar.ipynb'],
+    'wisdm':          ['01_explore_wisdm.ipynb'],
+    'combined':       ['01_explore_combined.ipynb'],
+    'whuGAIT_signal': ['01_explore_whuGAIT_signal.ipynb'],
 }
 
 RUNS = {
@@ -70,12 +71,23 @@ RUNS = {
         'encoder_dataset': None,
         'notebooks':       EXPLORE['wisdm'] + PIPELINE_CORE + EVASION,
     },
-    # ── Combined cross-dataset evaluation ───────────────────────────────────────
+    # ── Combined cross-dataset evaluation ────────────────────────────────────
     # Prerequisite: 'whuGAIT' run must be complete (CNN checkpoint reused).
     'combined': {
         'dataset':         'combined',
         'encoder_dataset': 'whuGAIT',
         'notebooks':       EXPLORE['combined'] + PIPELINE_CORE + EVASION,
+    },
+    # ── CNN-vs-Auth signal disentanglement ───────────────────────────────────
+    # Subjects 21-40: CNN trains on them, auth does NOT → isolates CNN signal.
+    # Subjects 41-60: auth trains on them, CNN does NOT → isolates auth signal.
+    # Subjects  1-20: held-out from both → baseline.
+    'whuGAIT_signal': {
+        'dataset':         'whuGAIT_signal',
+        'encoder_dataset': None,
+        'notebooks':       EXPLORE['whuGAIT_signal'] + PIPELINE_CORE + [
+            'analysis/signal_disentanglement.ipynb',
+        ],
     },
 }
 
@@ -456,7 +468,7 @@ if __name__ == '__main__':
     parser.add_argument('runs', nargs='*',
                         help=f'Run names. Available: {list(RUNS)}')
     parser.add_argument('--quick', action='store_true',
-                        help='Smoke-test mode: use reduced epochs/K from the quick: '
+                        help='quick-test mode: use reduced epochs/K from the quick: '
                              'block in config.yaml. Results are not thesis-quality; '
                              'use this to verify the pipeline runs on a new machine.')
     parser.add_argument('--dry-run', action='store_true',

@@ -61,6 +61,14 @@ pgd:
   n_combos_train_sample: 500 # training-split combos to attack (null = all ~4 k)
   seed_train_sample: 42      # RNG seed for the training-split subsample
 
+# ── Combined cross-dataset run (NB01 combined) ───────────────────────────────
+combined:
+  whuGAIT_n_members:    30    # subjects randomly drawn from IDs 21–118
+  whuGAIT_n_nonmembers: 10    # subjects randomly drawn from IDs 1–20
+  subject_seed:         10    # RNG seed for whuGAIT subject selection
+  n_train_pairs_per_class: 3000  # per dataset (same-person and different-person)
+  n_test_pairs_per_class:  2000  # per dataset
+
 # ── Quick / smoke-test mode (run_pipeline.py --quick) ────────────────────────
 # Overrides the values above for a fast end-to-end check (~10–20 min on CPU).
 # Results are not meaningful for the thesis — only for verifying the pipeline
