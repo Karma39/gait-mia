@@ -1,0 +1,257 @@
+\chapter{Evasion Attack}
+\label{ch:evasion}
+
+This chapter analyses whether the authentication model's decision boundary is robust: given an impostor pair that the model correctly rejects, how much does the probe signal need to change before the model accepts it? A perturbation $\boldsymbol{\delta}$ is added to the probe window and optimised via PGD to push the model's output below the acceptance threshold. The experiment is run over the impostor pairs in the test set, so the result quantifies how close the boundary is to naturally occurring gait signals across the subject population, rather than for a single targeted case. The perturbation budget is calibrated against the natural trial-to-trial variability of the signal, giving a reference scale for whether the required change is within or beyond what the model should already tolerate as normal intra-subject variation. The minimum effective perturbation budget $\varepsilon_\text{min}$ established here is later used as a membership inference signal in Chapter~\ref{ch:mia}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Attack Formulation}
+\label{sec:ev_formulation}
+
+\subsection{False Accept Objective}
+\label{ssec:ev_objective}
+
+The attack targets impostor pairs: two windows from different subjects that the authentication model would correctly reject. The attacker controls the probe window $\mathbf{x}_1$ and adds a perturbation $\boldsymbol{\delta}$ before it reaches the model. The reference window $\mathbf{x}_2$ stored in the authentication database is untouched. The goal is not to mimic a specific subject's gait but to push the model's output score across the decision boundary.
+
+The attack succeeds when the perturbed pair is accepted:
+\begin{equation}
+  P\!\left(\text{different person} \mid \mathbf{x}_1 + \boldsymbol{\delta},\,
+  \mathbf{x}_2\right) < 0.5.
+\end{equation}
+The attack surface is the raw sensor signal: the 6-channel, 128-timestep IMU window. The CNN and LSTM are not modified; the gradient flows through both during optimisation.
+
+\subsection{Norm Choice and Optimisation}
+\label{ssec:ev_pgd}
+
+The $\ell_2$ norm is chosen over $\ell_\infty$ for both physical and empirical reasons. A natural change in human gait distributes energy continuously across all sensor channels and all timesteps: a slightly longer stride or a shift in arm swing affects the full window, not a handful of isolated samples. An $\ell_\infty$ constraint allows the perturbation to concentrate its entire budget into a few large spikes at individual sensor readings, which correspond to sharp impact events that are physically implausible and easy to detect. An $\ell_2$ constraint instead bounds the total perturbation energy and encourages smooth, broadband changes that more closely resemble natural intra-subject variation. This choice also connects directly to the budget calibration: $\varepsilon_\text{target}$ is itself an $\ell_2$ distance (Section~\ref{sec:ev_budget}), making the budget ratio $\varepsilon_\text{min}/\varepsilon_\text{target}$ directly interpretable.
+
+The perturbation is found by standard PGD~\cite{madry2018towards}: starting from the clean probe $\mathbf{x}_1$, each of $K$ steps takes a gradient step on the cross-entropy loss with target label 0 (same person) and projects the result back onto the $\ell_2$ ball of radius $\varepsilon$. All experiments use $K = 20$ iterations, confirmed sufficient by the ablation in Section~\ref{ssec:ev_spectral_k}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Perturbation Budget Estimation}
+\label{sec:ev_budget}
+
+\subsection{Intra-Subject L2 as Reference Scale}
+\label{ssec:ev_l2}
+
+Rather than fixing $\varepsilon$ arbitrarily, the budget is anchored to the natural variability of the signal being attacked. For each dataset, $\varepsilon_\text{target}$ is defined as the median $\ell_2$ distance between two windows recorded from the same subject in the training split:
+\begin{equation}
+  \varepsilon_\text{target}
+  = \mathrm{median}_{(i,j)\,:\,s_i = s_j}
+    \left\| \mathbf{x}_i - \mathbf{x}_j \right\|_2.
+\end{equation}
+A perturbation with $\|\boldsymbol{\delta}\|_2 \leq \varepsilon_\text{target}$ is smaller than the typical difference between two windows from the same person, giving a reference point for what the model should already tolerate as natural intra-subject variation.
+
+The resulting values are $\varepsilon_\text{target} = \whuGAITEpsTarget$ (whuGAIT), $\uciharEpsTarget$ (UCI-HAR), $\wisdmEpsTarget$ (WISDM), and $\combinedEpsTarget$ (combined). The differences reflect window length and sampling rate: WISDM's 20\,Hz, 128-sample windows span 6.4 seconds and accumulate more cycle-to-cycle variation than shorter windows.
+
+\subsection{Grid Sweep and Binary Search}
+\label{ssec:ev_grid}
+
+For each impostor pair $(A, B)$ the minimum effective budget $\varepsilon_\text{min}$ is found in two phases. First, a geometric grid of $\varepsilon$ values spanning $[5\%\,\varepsilon_\text{target},\,
+\varepsilon_\text{target}]$ plus sparse sentinels at $2\times$, $5\times$, and
+$10\times \varepsilon_\text{target}$ is swept in ascending order. A pair exits the sweep at the first $\varepsilon$ where the PGD attack succeeds, defining a bracket $[\varepsilon_\text{lo}, \varepsilon_\text{hi}]$. Pairs that do not succeed even at the $10\times$ sentinel are classified as resistant.
+
+Second, $N_\text{bisect} = 10$ binary search steps narrow the bracket to a refined $\varepsilon_\text{min} \approx \varepsilon_\text{hi}$, which is the smallest confirmed successful budget for that pair.
+
+Figure~\ref{fig:evasion_eps} shows the resulting distribution of per-pair normalised budgets across all four dataset configurations. Most pairs are broken well below $\varepsilon_\text{target}$, with the bulk of the mass below 1.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{analysis/evasion_eps_distribution.png}
+  \caption{Distribution of normalised minimum attack budget
+           $\varepsilon_\text{min}/\varepsilon_\text{target}$ over succeeded
+           test-split pairs. The dashed vertical line marks $\varepsilon_\text{target}$
+           (budget ratio $= 1$); the red line shows the mean.}
+  \label{fig:evasion_eps}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Results}
+\label{sec:ev_results}
+
+\subsection{Test-Split Attack}
+\label{ssec:ev_asr}
+
+The test split contains impostor pairs formed from non-member subjects the model has never seen during training. Table~\ref{tab:evasion_results} reports the combo-level ASR and mean budget ratio $\varepsilon_\text{min}/\varepsilon_\text{target}$ for all four dataset configurations.
+
+\begin{table}[htbp]
+\centering
+\caption{Evasion attack on the test split (non-member pairs). Budget ratio is the mean
+         $\varepsilon_\text{min} / \varepsilon_\text{target}$ over successful pairs.}
+\label{tab:evasion_results}
+\begin{tabular}{lrrrr}
+\toprule
+Dataset  & $\varepsilon_\text{target}$ & Combos & ASR & Budget ratio \\
+\midrule
+whuGAIT  & \whuGAITEpsTarget  & \whuGAITNCombos  & \whuGAITComboASR  & \whuGAITBudgetRatio  \\
+UCI-HAR  & \uciharEpsTarget   & \uciharNCombos   & \uciharComboASR   & \uciharBudgetRatio   \\
+WISDM    & \wisdmEpsTarget    & \wisdmNCombos    & \wisdmComboASR    & \wisdmBudgetRatio    \\
+Combined & \combinedEpsTarget & \combinedNCombos & \combinedComboASR & \combinedBudgetRatio \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The attack succeeds on the majority of pairs. whuGAIT achieves an ASR of \whuGAITComboASR{} with a median budget of \whuGAITBudgetRatio{} of $\varepsilon_\text{target}$: the required perturbation is a small fraction of the natural intra-subject spread. WISDM requires a larger relative budget (\wisdmBudgetRatio{} of $\varepsilon_\text{target}$), consistent with its longer windows capturing more person-specific cycle structure.
+
+\subsection{Training-Split Attack}
+\label{ssec:ev_traintest}
+
+The training split contains impostor pairs formed from enrolled members. The model has calibrated its decision boundary directly on these subjects, so their genuine scores sit lower and require a larger perturbation to cross the threshold. Table~\ref{tab:evasion_train} shows the result.
+
+\begin{table}[htbp]
+\centering
+\caption{Evasion attack on the training split (enrolled members). Budget
+         ratio is mean $\varepsilon_\text{min} / \varepsilon_\text{target}$ over successful pairs.}
+\label{tab:evasion_train}
+\begin{tabular}{lrrr}
+\toprule
+Dataset  & $\varepsilon_\text{target}$ & ASR & Budget ratio \\
+\midrule
+whuGAIT  & \whuGAITEpsTarget  & \whuGAITTrainComboASR  & \whuGAITTrainBudgetRatio  \\
+UCI-HAR  & \uciharEpsTarget   & \uciharTrainComboASR   & \uciharTrainBudgetRatio   \\
+WISDM    & \wisdmEpsTarget    & \wisdmTrainComboASR    & \wisdmTrainBudgetRatio    \\
+Combined & \combinedEpsTarget & \combinedTrainComboASR & \combinedTrainBudgetRatio \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The budget ratio is roughly $3$--$4\times$ larger on the training split than on the test split. Figure~\ref{fig:evasion_train_vs_test} shows the distribution shift.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{analysis/evasion_train_vs_test.png}
+  \caption{Budget ratio distributions: training split (enrolled members, solid) vs.\ test split (held-out non-members, dashed). The training-split distribution is shifted right.}
+  \label{fig:evasion_train_vs_test}
+\end{figure}
+
+\subsection{Four-Case Attack Breakdown}
+\label{ssec:ev_fourcase}
+
+Tables~\ref{tab:evasion_fourcase_whugait}--\ref{tab:evasion_fourcase_combined} report ASR and mean $\varepsilon_\text{min}$ per pair type and dataset configuration.
+
+\input{../generated/compare_evasion_fourcase_whuGAIT_metrics}
+\begin{table}[htbp]
+\centering
+\caption{PGD evasion results by pair type: whuGAIT. MM: training split. NN, MN, NM: test split. Mean $\varepsilon_\text{min}$ is the mean per-combo minimum budget in raw sensor units.}
+\label{tab:evasion_fourcase_whugait}
+\begin{tabular}{lrrr}
+\toprule
+Pair type & N pairs & ASR & Mean $\varepsilon_\text{min}$ \\
+\midrule
+MM & \pgdCaseMMNPairs & \pgdCaseMMAsr & \pgdCaseMMMeanEps \\
+NN & \pgdCaseNNNPairs & \pgdCaseNNAsr & \pgdCaseNNMeanEps \\
+MN & \pgdCaseMNNPairs & \pgdCaseMNAsr & \pgdCaseMNMeanEps \\
+NM & \pgdCaseNMNPairs & \pgdCaseNMAsr & \pgdCaseNMMeanEps \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\input{../generated/compare_evasion_fourcase_ucihar_metrics}
+\begin{table}[htbp]
+\centering
+\caption{PGD evasion results by pair type: UCI-HAR. MM: training split. NN, MN, NM: test split. Mean $\varepsilon_\text{min}$ in raw sensor units.}
+\label{tab:evasion_fourcase_ucihar}
+\begin{tabular}{lrrr}
+\toprule
+Pair type & N pairs & ASR & Mean $\varepsilon_\text{min}$ \\
+\midrule
+MM & \pgdCaseMMNPairs & \pgdCaseMMAsr & \pgdCaseMMMeanEps \\
+NN & \pgdCaseNNNPairs & \pgdCaseNNAsr & \pgdCaseNNMeanEps \\
+MN & \pgdCaseMNNPairs & \pgdCaseMNAsr & \pgdCaseMNMeanEps \\
+NM & \pgdCaseNMNPairs & \pgdCaseNMAsr & \pgdCaseNMMeanEps \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\input{../generated/compare_evasion_fourcase_wisdm_metrics}
+\begin{table}[htbp]
+\centering
+\caption{PGD evasion results by pair type: WISDM. MM: training split. NN, MN, NM: test split. Mean $\varepsilon_\text{min}$ in raw sensor units.}
+\label{tab:evasion_fourcase_wisdm}
+\begin{tabular}{lrrr}
+\toprule
+Pair type & N pairs & ASR & Mean $\varepsilon_\text{min}$ \\
+\midrule
+MM & \pgdCaseMMNPairs & \pgdCaseMMAsr & \pgdCaseMMMeanEps \\
+NN & \pgdCaseNNNPairs & \pgdCaseNNAsr & \pgdCaseNNMeanEps \\
+MN & \pgdCaseMNNPairs & \pgdCaseMNAsr & \pgdCaseMNMeanEps \\
+NM & \pgdCaseNMNPairs & \pgdCaseNMAsr & \pgdCaseNMMeanEps \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\input{../generated/compare_evasion_fourcase_combined_metrics}
+\begin{table}[htbp]
+\centering
+\caption{PGD evasion results by pair type: Combined. MM: training split. NN, MN, NM: test split. Mean $\varepsilon_\text{min}$ in raw sensor units.}
+\label{tab:evasion_fourcase_combined}
+\begin{tabular}{lrrr}
+\toprule
+Pair type & N pairs & ASR & Mean $\varepsilon_\text{min}$ \\
+\midrule
+MM & \pgdCaseMMNPairs & \pgdCaseMMAsr & \pgdCaseMMMeanEps \\
+NN & \pgdCaseNNNPairs & \pgdCaseNNAsr & \pgdCaseNNMeanEps \\
+MN & \pgdCaseMNNPairs & \pgdCaseMNAsr & \pgdCaseMNMeanEps \\
+NM & \pgdCaseNMNPairs & \pgdCaseNMAsr & \pgdCaseNMMeanEps \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The expected pattern is that MM requires a larger mean $\varepsilon_\text{min}$ than NN: enrolled subjects have tighter genuine/impostor separation (Section~\ref{sec:auth_eval}), so a perturbation must bridge a wider gap to reach the acceptance threshold. WISDM is the exception, where all four pools cluster near $\varepsilon_\text{target}$ with minimal differences between pair types; this is consistent with WISDM's stronger model generalisation (small MM--NN AUC gap in Table~\ref{tab:four_case}), which leaves little asymmetry for the budget to reflect.
+
+Where MM requires a larger budget than NN, that asymmetry is a candidate membership inference signal: a probe subject whose pairs demand more perturbation is likely enrolled. Chapter~\ref{ch:mia} evaluates this signal formally, pooling all four pair types per probe subject.
+
+A note on aggregation: the budget ratio in Tables~\ref{tab:evasion_results} and~\ref{tab:evasion_train} is the pair-level mean $\varepsilon_\text{min}/\varepsilon_\text{target}$, while the mean $\varepsilon_\text{min}$ here is the combo-level mean. The two statistics agree in direction but differ in magnitude.
+
+The group-level means, however, mask high within-group variance. Each subject's mean $\varepsilon_\text{min}$ is computed from a limited number of pairs and reflects not just membership but also that subject's intrinsic gait distinctiveness: a subject with a highly idiosyncratic gait is hard to impersonate regardless of enrolment status. This per-subject noise limits discrimination to AUC $\approx 0.58$ on whuGAIT and AUC $\approx 0.67$ on UCI-HAR despite the clear group-level difference.
+
+On WISDM the problem is compounded: all four cases cluster near $\varepsilon_\text{target}$ (budget ratios 0.86--0.93), meaning the attack is uniformly difficult across all subjects. There is almost no residual spread to discriminate on, and the marginal inversion (member mean $27.4$ vs non-member mean $28.9$) makes the per-subject AUC fall below 0.5.
+
+\subsection{Feature-Space Analysis}
+\label{ssec:ev_features}
+
+The attack optimises the input end-to-end through both the CNN and the LSTM, but this does not indicate which component is being exploited. Figure~\ref{fig:feature_shift} shows the CNN embedding distance before and after perturbation on 200 sampled whuGAIT pairs. The scatter plot reveals that adversarial distances are nearly identical to clean distances — points lie on the diagonal — and the ratio histogram is sharply concentrated at 1.0 (mean ratio 1.006). The attack does not substantially close the CNN representation gap between the two subjects; instead it exploits the LSTM's decision boundary directly, producing an input that the classifier accepts without materially altering the CNN embedding. The same pattern holds across all dataset configurations.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{whuGAIT/06c_whuGAIT_feature_shift.png}
+  \caption{CNN feature-space shift on 200 sampled whuGAIT pairs. Left: adversarial
+           vs.\ clean embedding distance between the two subjects; points on the
+           diagonal indicate no change. Right: distribution of the distance ratio
+           $d_\text{adv}/d_\text{clean}$; the mean of 1.006 shows the perturbation
+           does not close the representation gap. The attack exploits the LSTM
+           decision boundary rather than aligning CNN embeddings.}
+  \label{fig:feature_shift}
+\end{figure}
+
+\input{../generated/nb06c_whuGAIT_metrics}
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Spectral Analysis and Detection Resistance}
+\label{sec:ev_spectral}
+
+\subsection{Frequency Distribution of Perturbations}
+\label{ssec:ev_spectral_freq}
+
+A perturbation small in $\ell_2$ could still be detectable if its energy concentrates at frequencies outside the biological range of human gait. Human gait produces most IMU signal energy below 10\,Hz (stride frequency and harmonics); above that band the signal decays toward the sensor noise floor.
+
+Figure~\ref{fig:spectral_psd} shows the mean PSD for whuGAIT. In the gait band the perturbation (green dotted) sits well below both clean and adversarial signals, which are nearly indistinguishable. Above $\sim$20\,Hz, where the clean gait signal has already decayed to negligible absolute power, the perturbation decays more slowly and the adversarial signal locally exceeds the clean in the accelerometer channels; the gyroscope channels do not show this effect. This high-frequency excess is real but small in absolute terms: most perturbation energy falls in the 0--10\,Hz gait band, and a Mann-Whitney test on the fraction of total signal energy above 10\,Hz finds no significant difference between clean and adversarial groups. A spectral detector operating on the energy fraction above 10\,Hz would not flag these examples; a detector specifically targeting the 20--25\,Hz tail could in principle detect the excess, but would need to be calibrated against naturally occurring gait noise at those frequencies.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{whuGAIT/06c_whuGAIT_spectral.png}
+  \caption{Mean PSD (log scale) of clean (blue solid), adversarial (red dashed),
+           and perturbation (green dotted) signals for all six IMU channels,
+           averaged over 200 successfully attacked whuGAIT pairs.
+           The perturbation is 2--3 orders below the clean signal in the gait band
+           (0--10\,Hz). Above 20\,Hz the adversarial signal exceeds the clean in
+           accelerometer channels because the gait signal decays faster than the
+           perturbation.}
+  \label{fig:spectral_psd}
+\end{figure}
+
+\FloatBarrier
+\subsection{PGD Iteration Ablation}
+\label{ssec:ev_spectral_k}
+
+To confirm that $K = \kOriginal{}$ iterations is sufficient, the grid sweep was re-run on \nSampleAblation{} sampled pairs at $K \in \kValues{}$. Mean $\varepsilon_\text{min}$ decreases as $K$ grows; the best result is at $K = \kBestEps{}$ (\kBestMeanEpsMin{} sensor units). The fractional improvement from $K = \kOriginal{}$ to $K = \kBestEps{}$ is \kConvergenceRatio{}, confirming that $K = \kOriginal{}$ sits at the knee of the curve and that additional iterations yield diminishing returns.
+
+

@@ -46,6 +46,12 @@ EVASION = [
     '06c_attack_validation.ipynb',
 ]
 
+CL_PIPELINE = [
+    '08a_cl_cnn.ipynb',
+    '08b_cl_authenticator.ipynb',
+    '08c_cl_mia.ipynb',
+]
+
 EXPLORE = {
     'whuGAIT':        ['01_explore_datasets.ipynb'],
     'ucihar':         ['01_explore_ucihar.ipynb'],
@@ -79,9 +85,10 @@ RUNS = {
         'notebooks':       EXPLORE['combined'] + PIPELINE_CORE + EVASION,
     },
     # ── CNN-vs-Auth signal disentanglement ───────────────────────────────────
-    # Subjects 21-40: CNN trains on them, auth does NOT → isolates CNN signal.
-    # Subjects 41-60: auth trains on them, CNN does NOT → isolates auth signal.
-    # Subjects  1-20: held-out from both → baseline.
+    # Group A (IDs  1-29):  CNN-only members  → isolates CNN signal.
+    # Group B (IDs 30-58):  auth-only members → isolates auth (LSTM) signal.
+    # Group C (IDs 59-87):  held-out from both → baseline.
+    # Group D (IDs 88-116): members of both   → combined signal.
     'whuGAIT_signal': {
         'dataset':         'whuGAIT_signal',
         'encoder_dataset': None,
@@ -89,6 +96,16 @@ RUNS = {
             'analysis/signal_disentanglement.ipynb',
         ],
     },
+    # ── Continual-learning MIA experiment ────────────────────────────────────
+    # NB08a: CL CNN (std + CDML, 4 tasks x 24 subjects each)
+    # NB08b: LSTM authenticator trained on the frozen CL backbone
+    # NB08c: delta-MIA; measures whether CDML affects MIA through authentication
+    'whuGAIT_cl': {
+        'dataset':         'whuGAIT',
+        'encoder_dataset': None,
+        'notebooks':       CL_PIPELINE,
+    },
+
 }
 
 # ── Config loading ────────────────────────────────────────────────────────────
@@ -429,6 +446,7 @@ ANALYSIS_NOTEBOOKS = [
     'analysis/compare_evasion.ipynb',
     'analysis/compare_combined.ipynb',
 ]
+
 
 def run_analysis(dry_run: bool = False, timeout: int = 600) -> bool:
     """Execute the three cross-dataset analysis notebooks and save to executed/analysis/."""

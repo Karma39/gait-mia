@@ -1,7 +1,7 @@
 \chapter{Background}
 \label{ch:background}
 
-This chapter introduces the concepts that will lay the foundation for the rest of the thesis. Section~\ref{sec:bg_gait} describes gait signals and how they are captured with inertial sensors. Section~\ref{sec:bg_auth} explains the distinction between identification and authentication and how deep learning architectures are adapted for the authentication task. Section~\ref{sec:bg_privacy} covers the connection between model memorisation and privacy risk. Section~\ref{sec:bg_mia} formalises membership inference attacks and describes the likelihood ratio formulation used in this work.
+Gait encodes enough person-specific information to distinguish individuals reliably, and the neural networks that exploit this fit training subjects more closely than held-out ones. The chapters that follow measure the consequences of that asymmetry. The background below provides the vocabulary for that analysis.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Gait Recognition}
@@ -126,3 +126,56 @@ For gait authentication, the per-example score $\phi$ is adapted to the pairwise
   \label{eq:bg_delta}
 \end{equation}
 where $\bar{P}_{\text{imp}}(s)$ is the mean model output $P(\text{different person})$ over impostor pairs involving $s$, and $\bar{P}_{\text{gen}}(s)$ is the mean over genuine pairs. A training subject whose gait representation has been fitted tightly by the model will tend to produce a larger gap between impostor and genuine scores, resulting in a higher $\delta(s)$ compared to a held-out subject. The shadow models are trained with and without each target subject's pairs, and the resulting distributions of $\delta$ values are used in place of the standard loss distributions in Equation~\eqref{eq:lira}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Adversarial Examples}
+\label{sec:bg_adv}
+
+Adding a small, crafted perturbation to a neural network input can change its prediction while leaving the input visually or physically similar to the original. Such inputs are adversarial examples~\cite{goodfellow2015explaining}. The perturbation is not random noise. It is the solution to an optimisation that maximises the model's loss with respect to the input, subject to a constraint on perturbation size.
+
+\subsection{Norm Constraints and $\ell_2$ Perturbations}
+\label{ssec:bg_adv_norm}
+
+Two norm constraints are common. The $\ell_\infty$ norm limits the maximum change at any single input coordinate. The $\ell_2$ norm limits total perturbation energy across all coordinates. For time-series signals, an $\ell_2$ constraint produces smoother perturbations that more closely resemble natural variation, since real gait changes distribute energy across the whole window rather than concentrating it at isolated timesteps. This thesis uses $\ell_2$ perturbations throughout. The budget is calibrated against the natural intra-subject variability of the gait signal (Chapter~\ref{ch:evasion}).
+
+\subsection{Projected Gradient Descent}
+\label{ssec:bg_pgd}
+
+Projected gradient descent (PGD)~\cite{madry2018towards} is the standard algorithm for computing adversarial examples under a norm constraint. Starting from the clean input $\mathbf{x}$, each of $K$ steps takes a gradient step on the attack objective and then projects back onto the feasible set:
+\begin{equation}
+  \mathbf{x}^{(t+1)} = \Pi_{\|\boldsymbol{\delta}\|_2 \leq \varepsilon}
+  \!\left(\mathbf{x}^{(t)} + \alpha \cdot \nabla_{\mathbf{x}}
+  \mathcal{L}(\mathbf{x}^{(t)},\, y_{\text{target}})\right),
+  \label{eq:pgd}
+\end{equation}
+where $\Pi$ denotes projection onto the $\ell_2$ ball of radius $\varepsilon$, $\alpha$ is the step size, and $y_{\text{target}}$ is the attack target label. More steps and a smaller $\alpha$ give a more precise but more expensive search. Chapter~\ref{ch:evasion} uses PGD to find the minimum budget $\varepsilon_\text{min}$ needed to push an impostor pair across the authentication threshold.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Continual Learning}
+\label{sec:bg_cl}
+
+A model fine-tuned on new data loses performance on earlier data. This is catastrophic forgetting~\cite{mccloskey1989catastrophic}. Continual learning (CL) methods train sequentially on a series of tasks while retaining performance on all previous ones.
+
+\subsection{Class-Incremental Learning}
+\label{ssec:bg_cl_incremental}
+
+In class-incremental learning, each task introduces new classes. At test time the model must classify any input from any previously seen task, without knowing which task it belongs to. For gait authentication the natural mapping is: each task is a new batch of subjects enrolled into the system. The model must recognise all enrolled subjects after each enrolment round.
+
+\subsection{Catastrophic Forgetting}
+\label{ssec:bg_forgetting}
+
+Gradient updates on a new task shift parameters away from the configuration that minimised loss on earlier tasks. Performance on those tasks degrades, sometimes to near-random levels. Two main strategies exist to limit this. Regularisation methods penalise large parameter changes from the previous task's solution~\cite{kirkpatrick2017overcoming}. Modulation methods apply a task-specific transformation to the activations at training time, partitioning the representation space between tasks.
+
+\subsection{Code-Based Modulation}
+\label{ssec:bg_cdml}
+
+Code-based modulation applies a task-specific binary vector to the model's activations at training time. Before task $k$, a binary code $\mathbf{s}_k \in \{-1, +1\}^{d}$ is drawn from a seeded random generator. During training on task $k$, the embedding $\mathbf{h} \in \mathbb{R}^d$ produced by the backbone is modulated element-wise before the classification head:
+\begin{equation}
+  \tilde{\mathbf{h}} = \mathbf{h} \odot \mathbf{s}_k.
+  \label{eq:cdml_mod}
+\end{equation}
+Each code partitions the $d$ embedding dimensions into a task-specific subspace, reducing interference between tasks without adding parameters.
+
+At inference time the code is not applied. The model outputs the raw embedding $\mathbf{h}$ regardless of which task the query belongs to. The authentication head trained downstream of this frozen backbone therefore never sees a modulated embedding. The code is a training-time device only.
+
+The Code Division Modulation Layer (CDML)~\cite{milani2024gait} implements this mechanism. Chapter~\ref{ch:cl_mia} evaluates whether CDML changes the membership signal that leaks into a downstream authenticator.

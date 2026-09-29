@@ -16,6 +16,8 @@
 \usepackage{subcaption}
 \usepackage{setspace}
 \usepackage{fancyhdr}
+\usepackage{tikz}
+\usepackage[section]{placeins}
 \sisetup{reset-text-series=false, text-series-to-math=true}
 \onehalfspacing
 
@@ -30,27 +32,32 @@
 \providecommand{\whuGAITCnnTestAcc}{\tbd}
 \providecommand{\whuGAITAuthTestAUC}{\tbd}
 \providecommand{\whuGAITSimplDAUC}{\tbd}
+\providecommand{\whuGAITSimplDTPRone}{\tbd}
 \providecommand{\whuGAITSimplDTPRten}{\tbd}
 \providecommand{\whuGAITComboASR}{\tbd}
 \providecommand{\whuGAITBudgetRatio}{\tbd}
 \providecommand{\uciharCnnTestAcc}{\tbd}
 \providecommand{\uciharAuthTestAUC}{\tbd}
 \providecommand{\uciharSimplDAUC}{\tbd}
+\providecommand{\uciharSimplDTPRone}{\tbd}
 \providecommand{\uciharSimplDTPRten}{\tbd}
 \providecommand{\uciharComboASR}{\tbd}
 \providecommand{\wisdmCnnTestAcc}{\tbd}
 \providecommand{\wisdmAuthTestAUC}{\tbd}
 \providecommand{\wisdmSimplDAUC}{\tbd}
+\providecommand{\wisdmSimplDTPRone}{\tbd}
 \providecommand{\wisdmSimplDTPRten}{\tbd}
 \providecommand{\wisdmComboASR}{\tbd}
 \providecommand{\combinedAuthTestAUC}{\tbd}
 \providecommand{\combinedSimplDAUC}{\tbd}
+\providecommand{\combinedSimplDTPRone}{\tbd}
 \providecommand{\combinedSimplDTPRten}{\tbd}
 \providecommand{\signalAuthModelAUCB}{\tbd}
 \providecommand{\signalAuthModelAUCA}{\tbd}
 \providecommand{\signalAuthModelAUCC}{\tbd}
 \providecommand{\signalMiaAUCBvsC}{\tbd}
 \providecommand{\signalMiaAUCAvsC}{\tbd}
+\providecommand{\signalConfusionThresholdFPRten}{\tbd}
 
 % ── auto-generated metric fallbacks ─────────────────────────────────────────
 \providecommand{\baselineAlreadyAccepted}{\tbd}
@@ -147,6 +154,85 @@
 \providecommand{\signalMiaAUCAvsCLira}{\tbd}
 \providecommand{\signalMiaAUCBvsCCold}{\tbd}
 \providecommand{\signalMiaAUCBvsCLira}{\tbd}
+\providecommand{\signalAuthModelAUCD}{\tbd}
+\providecommand{\signalMiaAUCDvsC}{\tbd}
+\providecommand{\signalMiaAUCDvsCLira}{\tbd}
+\providecommand{\signalMiaAUCDvsCCold}{\tbd}
+\providecommand{\signalMiaInteractionDiff}{\tbd}
+\providecommand{\signalMiaInteractionSuperAdditive}{\tbd}
+\providecommand{\signalConfusionTPRC}{\tbd}
+\providecommand{\signalConfusionTPRA}{\tbd}
+\providecommand{\signalConfusionTPRB}{\tbd}
+\providecommand{\signalConfusionTPRD}{\tbd}
+\providecommand{\signalConfusionThresholdFPRten}{\tbd}
+% four-case authenticator metrics
+\providecommand{\whugaitFourCaseMMAcc}{\tbd}
+\providecommand{\whugaitFourCaseMMAuc}{\tbd}
+\providecommand{\whugaitFourCaseNNAcc}{\tbd}
+\providecommand{\whugaitFourCaseNNAuc}{\tbd}
+\providecommand{\whugaitFourCaseMNAcc}{\tbd}
+\providecommand{\whugaitFourCaseNMAcc}{\tbd}
+\providecommand{\whugaitFourCaseAucGap}{\tbd}
+\providecommand{\whugaitFourCaseAccGap}{\tbd}
+\providecommand{\uciharFourCaseMMAcc}{\tbd}
+\providecommand{\uciharFourCaseMMAuc}{\tbd}
+\providecommand{\uciharFourCaseNNAcc}{\tbd}
+\providecommand{\uciharFourCaseNNAuc}{\tbd}
+\providecommand{\uciharFourCaseMNAcc}{\tbd}
+\providecommand{\uciharFourCaseNMAcc}{\tbd}
+\providecommand{\uciharFourCaseAucGap}{\tbd}
+\providecommand{\uciharFourCaseAccGap}{\tbd}
+\providecommand{\wisdmFourCaseMMAcc}{\tbd}
+\providecommand{\wisdmFourCaseMMAuc}{\tbd}
+\providecommand{\wisdmFourCaseNNAcc}{\tbd}
+\providecommand{\wisdmFourCaseNNAuc}{\tbd}
+\providecommand{\wisdmFourCaseMNAcc}{\tbd}
+\providecommand{\wisdmFourCaseNMAcc}{\tbd}
+\providecommand{\wisdmFourCaseAucGap}{\tbd}
+\providecommand{\wisdmFourCaseAccGap}{\tbd}
+% simple-delta threshold metrics
+\providecommand{\miaAUC}{\tbd}
+\providecommand{\miaMeanThr}{\tbd}
+\providecommand{\miaMeanTPR}{\tbd}
+\providecommand{\miaMeanFPR}{\tbd}
+\providecommand{\miaOptThr}{\tbd}
+\providecommand{\miaOptTPR}{\tbd}
+\providecommand{\miaOptFPR}{\tbd}
+\providecommand{\uciharMiaAUC}{\tbd}
+\providecommand{\uciharMiaMeanTPR}{\tbd}
+\providecommand{\uciharMiaMeanFPR}{\tbd}
+\providecommand{\uciharMiaOptTPR}{\tbd}
+\providecommand{\uciharMiaOptFPR}{\tbd}
+\providecommand{\uciharMiaMeanThr}{\tbd}
+\providecommand{\uciharMiaOptThr}{\tbd}
+\providecommand{\wisdmMiaAUC}{\tbd}
+\providecommand{\wisdmMiaMeanTPR}{\tbd}
+\providecommand{\wisdmMiaMeanFPR}{\tbd}
+\providecommand{\wisdmMiaOptTPR}{\tbd}
+\providecommand{\wisdmMiaOptFPR}{\tbd}
+\providecommand{\wisdmMiaMeanThr}{\tbd}
+\providecommand{\wisdmMiaOptThr}{\tbd}
+% hidden-layer centroid delta threshold metrics
+\providecommand{\hiddenDeltaAUC}{\tbd}
+\providecommand{\hiddenMeanTPR}{\tbd}
+\providecommand{\hiddenMeanFPR}{\tbd}
+\providecommand{\hiddenOptTPR}{\tbd}
+\providecommand{\hiddenOptFPR}{\tbd}
+\providecommand{\hiddenMeanThr}{\tbd}
+\providecommand{\hiddenOptThr}{\tbd}
+\providecommand{\uciharHiddenMeanTPR}{\tbd}
+\providecommand{\uciharHiddenMeanFPR}{\tbd}
+\providecommand{\uciharHiddenOptTPR}{\tbd}
+\providecommand{\uciharHiddenOptFPR}{\tbd}
+\providecommand{\uciharHiddenMeanThr}{\tbd}
+\providecommand{\uciharHiddenOptThr}{\tbd}
+\providecommand{\wisdmHiddenDeltaAUC}{\tbd}
+\providecommand{\wisdmHiddenMeanTPR}{\tbd}
+\providecommand{\wisdmHiddenMeanFPR}{\tbd}
+\providecommand{\wisdmHiddenOptTPR}{\tbd}
+\providecommand{\wisdmHiddenOptFPR}{\tbd}
+\providecommand{\wisdmHiddenMeanThr}{\tbd}
+\providecommand{\wisdmHiddenOptThr}{\tbd}
 \providecommand{\whuGAITGreyLiraRawAUC}{\tbd}
 \providecommand{\whuGAITGreyLiraRawTPRten}{\tbd}
 \providecommand{\whuGAITColdLiraRawAUC}{\tbd}
@@ -187,6 +273,26 @@
 \providecommand{\combinedColdLiraMfTPRten}{\tbd}
 \providecommand{\combinedWarmLiraRawAUC}{\tbd}
 \providecommand{\combinedWarmLiraRawTPRten}{\tbd}
+\providecommand{\whuGAITHiddenDeltaAUC}{\tbd}
+\providecommand{\uciharHiddenDeltaAUC}{\tbd}
+\providecommand{\wisdmHiddenDeltaAUC}{\tbd}
+\providecommand{\combinedHiddenDeltaAUC}{\tbd}
+% cl_mia chapter fallbacks
+\providecommand{\clMiaCLMIAStdAUC}{\tbd}
+\providecommand{\clMiaCLMIACdmlAUC}{\tbd}
+\providecommand{\clMiaCLMIAStdMemDelta}{\tbd}
+\providecommand{\clMiaCLMIACdmlMemDelta}{\tbd}
+\providecommand{\clMiaCLMIAStdNMDelta}{\tbd}
+\providecommand{\clMiaCLMIACdmlNMDelta}{\tbd}
+\providecommand{\clMiaCLMIAStdSep}{\tbd}
+\providecommand{\clMiaCLMIACdmlSep}{\tbd}
+\providecommand{\clMiaCLMIAAUCGap}{\tbd}
+\providecommand{\clMiaCLStdAuthAcc}{\tbd}
+\providecommand{\clMiaCLCdmlAuthAcc}{\tbd}
+\providecommand{\whuGAITPgdMiaAUC}{\tbd}
+\providecommand{\uciharPgdMiaAUC}{\tbd}
+\providecommand{\wisdmPgdMiaAUC}{\tbd}
+\providecommand{\combinedPgdMiaAUC}{\tbd}
 \providecommand{\spectralFCutoff}{\tbd}
 \providecommand{\spectralFracInBand}{\tbd}
 \providecommand{\uciharAuthDiffMean}{\tbd}
@@ -243,6 +349,22 @@
   {\input{../generated/compare_models_wisdm_metrics}}{}
 \IfFileExists{../generated/compare_models_combined_metrics.tex}
   {\input{../generated/compare_models_combined_metrics}}{}
+\IfFileExists{../generated/nb05a_metrics.tex}
+  {\input{../generated/nb05a_metrics}}{}
+\IfFileExists{../generated/nb05a_ucihar_metrics.tex}
+  {\input{../generated/nb05a_ucihar_metrics}}{}
+\IfFileExists{../generated/nb05a_wisdm_metrics.tex}
+  {\input{../generated/nb05a_wisdm_metrics}}{}
+\IfFileExists{../generated/nb05a_combined_metrics.tex}
+  {\input{../generated/nb05a_combined_metrics}}{}
+\IfFileExists{../generated/nb05a_hidden_metrics.tex}
+  {\input{../generated/nb05a_hidden_metrics}}{}
+\IfFileExists{../generated/nb05a_hidden_ucihar_metrics.tex}
+  {\input{../generated/nb05a_hidden_ucihar_metrics}}{}
+\IfFileExists{../generated/nb05a_hidden_wisdm_metrics.tex}
+  {\input{../generated/nb05a_hidden_wisdm_metrics}}{}
+\IfFileExists{../generated/nb05a_hidden_combined_metrics.tex}
+  {\input{../generated/nb05a_hidden_combined_metrics}}{}
 \IfFileExists{../generated/compare_mia_whuGAIT_metrics.tex}
   {\input{../generated/compare_mia_whuGAIT_metrics}}{}
 \IfFileExists{../generated/compare_mia_ucihar_metrics.tex}
@@ -261,6 +383,16 @@
   {\input{../generated/compare_evasion_combined_metrics}}{}
 \IfFileExists{../generated/signal_disentanglement_metrics.tex}
   {\input{../generated/signal_disentanglement_metrics}}{}
+\IfFileExists{../generated/compare_mia_new_whuGAIT_metrics.tex}
+  {\input{../generated/compare_mia_new_whuGAIT_metrics}}{}
+\IfFileExists{../generated/compare_mia_new_ucihar_metrics.tex}
+  {\input{../generated/compare_mia_new_ucihar_metrics}}{}
+\IfFileExists{../generated/compare_mia_new_wisdm_metrics.tex}
+  {\input{../generated/compare_mia_new_wisdm_metrics}}{}
+\IfFileExists{../generated/compare_mia_new_combined_metrics.tex}
+  {\input{../generated/compare_mia_new_combined_metrics}}{}
+\IfFileExists{../generated/nb08c_cl_mia_metrics.tex}
+  {\input{../generated/nb08c_cl_mia_metrics}}{}
 
 % ── metadata ──────────────────────────────────────────────────────────────────
 \title{Membership Inference and Evasion Attacks\\on Gait-Based Authentication}
@@ -273,6 +405,10 @@
 \fancyhead[L]{\leftmark}
 \fancyhead[R]{\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
+
+% loaded last: arrows library triggers a spurious preamble paragraph if loaded
+% before the \providecommand block; moving it here avoids that glitch
+\usetikzlibrary{positioning, arrows}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \begin{document}
@@ -299,6 +435,7 @@
 \end{titlepage}
 
 \pagenumbering{roman}
+\thispagestyle{empty}
 
 % ── abstract ──────────────────────────────────────────────────────────────────
 \begin{abstract}
@@ -312,31 +449,35 @@ present in the training set.
 
 This thesis investigates membership inference attacks (MIA) on a gait
 authentication pipeline consisting of a CNN encoder trained for subject
-identification and a pairwise LSTM authentication head
-that scores whether two gait windows come from the same person. Four attack variants are
+identification and a pairwise LSTM authentication head that scores whether two
+gait windows come from the same person. Two families of attack signal are
 evaluated across three inertial datasets (whuGAIT, UCI-HAR, WISDM) and a
-cross-dataset configuration: a simple score-based baseline, a grey-box
-likelihood ratio attack initialised from the target model weights, a warm-start
-black-box variant, and a cold-start black-box variant. To determine how much of
-the observed membership signal originates in the CNN encoder versus the LSTM
-authentication head, a signal disentanglement experiment assigns subjects to
-three non-overlapping groups so that the two components are trained on disjoint
-populations.
+cross-dataset configuration: delta-based signals derived from the model's output
+scores or its hidden-layer representations, and shadow-model likelihood ratio
+attacks with different initialisation strategies ranging from black-box to
+grey-box. Additionally, a projected gradient descent (PGD) evasion attack
+measures the minimum perturbation budget required for successful impersonation
+relative to natural intra-subject gait variation, and the resulting per-subject
+budget serves as a further membership signal.
 
-Additionally, a projected gradient descent (PGD) evasion attack is evaluated on all
-configurations, measuring the minimum perturbation budget required for a
-successful impersonation relative to natural intra-subject gait variation.
+To identify where the leakage originates, a signal analysis separates the
+contribution of the CNN encoder from that of the LSTM authenticator by training
+the two components on disjoint subject populations. Finally, a continual
+learning variant of the CNN encoder is evaluated to determine whether
+incremental subject enrolment changes the privacy profile of the downstream
+authenticator.
 
-Results show that a membership signal above chance is detectable across
-configurations, with the authenticator and CNN encoder contributing comparable
-amounts to the signal. Cold-start LiRA is the most consistent attack variant
-across datasets. Evasion perturbations that succeed tend to stay within the
-natural variation budget, raising practical concerns about the robustness of the
-system.
+A membership signal above chance is detectable across all configurations. The
+LSTM authenticator is the primary source of leakage; the CNN encoder contributes
+an independent but smaller signal. No single attack variant dominates across
+datasets. Evasion perturbations that succeed tend to stay within the natural
+variation budget, and continual learning with code-based feature modulation
+slightly increases MIA vulnerability by preserving subject-specific
+representations more tightly than standard incremental training.
 
 \bigskip
 \noindent\textit{Keywords:} gait authentication, membership inference attack,
-LiRA, adversarial evasion, inertial sensors, privacy.
+adversarial evasion, continual learning, inertial sensors, privacy.
 \end{abstract}
 
 % ── front matter ──────────────────────────────────────────────────────────────
@@ -350,9 +491,10 @@ LiRA, adversarial evasion, inertial sensors, privacy.
 \input{chapters/02_background}
 \input{chapters/03_related_work}
 \input{chapters/04_system}
-\input{chapters/05_mia}
-\input{chapters/06_evasion}
-\input{chapters/07_conclusions}
+\input{chapters/05_evasion}
+\input{chapters/06_mia}
+\input{chapters/07_cl_mia}
+\input{chapters/08_conclusions}
 
 % ── bibliography ──────────────────────────────────────────────────────────────
 \bibliographystyle{plain}

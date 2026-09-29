@@ -91,7 +91,7 @@ For identification pre-training the feature map is flattened to a 2048-dimension
 \subsection{Training as Subject Identifier}
 \label{ssec:sys_cnn_train}
 
-For each within-dataset configuration the CNN is trained as a subject classifier on that dataset's member subjects, minimising cross-entropy loss on the per-window subject label. Training uses the Adam optimiser with a learning rate of $2.5 \times 10^{-3}$ and L2 weight decay of $1.5 \times 10^{-3}$. The CNN weights are fixed after identification training and are not updated during any subsequent stage.
+For each within-dataset configuration the CNN is trained as a subject classifier on that dataset's member subjects, minimising cross-entropy loss on the per-window subject label. Training uses the Adam optimiser with a learning rate of $10^{-3}$, no weight decay, for 25 epochs with batch size 512. The CNN weights are fixed after identification training and are not updated during any subsequent stage.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Authentication Model}
@@ -119,6 +119,8 @@ The authentication model pairs the frozen CNN encoder with a trainable LSTM head
 The LSTM head is trained on the member pairs using the Adam optimiser with learning rate $2.5 \times 10^{-3}$, L2 weight decay $1.5 \times 10^{-3}$, batch size 512, and dropout rate 0.3. Training runs for 10 epochs. The CNN weights are frozen throughout; only the LSTM weights and the FC layer are updated. This keeps the two stages independent: the CNN is shaped by the identification objective, the LSTM by the pairwise comparison objective. The signal disentanglement experiment in Section~\ref{sec:mia_signal} exploits this separation to measure how much each component contributes to the membership signal.
 
 Figure~\ref{fig:training_curves} shows the per-epoch train and test accuracy and loss for the authentication head across all four experimental configurations. The dotted vertical line marks the epoch selected by early stopping. whuGAIT trains for 2 epochs before the test accuracy stagnates; UCI-HAR and the combined run stop at epochs 2 and 8 respectively; WISDM trains for the full 10 epochs with the test accuracy still improving at the end. The growing train/test gap in UCI-HAR is consistent with the relatively small member pool (21 subjects), which gives the LSTM fewer pairs to generalise from.
+
+Early stopping is monitored on the test (non-member) subjects, so the saved checkpoint is the one that generalises best to held-out identities. This is technically a form of evaluation contamination: the test population influences which model is retained. However, the bias runs in the conservative direction for membership inference. A model selected for good non-member generalisation is less overfit to its training subjects than one saved at peak training accuracy, which means the member--non-member delta gap is smaller and the MIA signal is weaker. The attack AUCs reported in subsequent chapters are therefore a lower bound: a model trained without test-set guidance would likely produce a stronger membership signal.
 
 \begin{figure}[htbp]
   \centering
@@ -156,15 +158,83 @@ The held-out test set consists of the 9 UCI-HAR non-members and the 11 WISDM non
 \subsection{Signal Disentanglement Run}
 \label{ssec:sys_signal}
 
-The signal disentanglement configuration is a fifth pipeline run on whuGAIT using 60 of the 118 available subjects. The experiment requires three non-overlapping groups of equal size to ensure that any difference in measured membership signal does not depend on the training set size: Group C is fixed at subjects 1--20, which is the existing D5 non-member partition, so Groups A and B are also set to 20 subjects each to ensure that the CNN and the LSTM are trained on the same amount of data. The remaining 58 whuGAIT subjects are not used in this configuration. The three groups are defined as follows, so that the CNN encoder and the LSTM authentication head are trained on entirely disjoint populations:
+The signal disentanglement configuration is a fifth pipeline run using 116 of the 118 available whuGAIT subjects, partitioned into four contiguous non-overlapping groups of 29:
 
 \begin{itemize}
-  \item \textbf{Group A (subjects 21--40):} used only for CNN identification
-    training. The authentication head never sees pairs from these subjects.
-  \item \textbf{Group B (subjects 41--60):} used only for authentication head
-    training. The CNN is not trained to classify these subjects.
-  \item \textbf{Group C (subjects 1--20):} held out from both training stages
-    and used as the non-member baseline for the MIA attack.
+  \item \textbf{Group A (subjects 1--29):} CNN identification training only.
+    The authentication head never sees pairs from these subjects.
+  \item \textbf{Group B (subjects 30--58):} authentication head training only.
+    The CNN is not trained to classify these subjects.
+  \item \textbf{Group C (subjects 59--87):} held out from both training stages;
+    serves as the non-member baseline for the MIA attack.
+  \item \textbf{Group D (subjects 88--116):} used in both CNN identification
+    training and authentication head training.
 \end{itemize}
 
-Because the CNN and LSTM are trained on different subjects, the membership signal produced by each component is anchored to a different population. Comparing the attack's ability to distinguish Group A from Group C isolates the CNN's contribution, while comparing Group B against Group C isolates the authenticator's contribution. The two comparisons are evaluated on the same model and the same held-out group, making them directly comparable. The results are analysed in Section~\ref{sec:mia_signal}.
+Each group has 29 subjects so that the CNN and the LSTM are trained on the same amount of data per component. Subjects 117--118 are unused. Group D tests whether the two memorisation signals combine super-additively: if the joint signal from D exceeds the maximum of A and B, the two components reinforce each other. The results are analysed in Section~\ref{sec:mia_signal}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Authenticator Evaluation}
+\label{sec:auth_eval}
+
+Before examining attacks against the model, it is useful to characterise how the authentication model behaves across four distinct pair-type pools. The four pools are constructed from member subjects (enrolled during training, $\mathcal{M}$) and non-member subjects (held out, $\mathcal{N}$):
+
+\begin{itemize}
+  \item \textbf{MM}: probe and gallery both from $\mathcal{M}$; 50\% genuine, 50\% impostor.
+  \item \textbf{NN}: probe and gallery both from $\mathcal{N}$; 50\% genuine, 50\% impostor.
+  \item \textbf{MN}: probe from $\mathcal{M}$, gallery from $\mathcal{N}$; 100\% impostor.
+  \item \textbf{NM}: probe from $\mathcal{N}$, gallery from $\mathcal{M}$; 100\% impostor.
+\end{itemize}
+
+The NN pool is the primary accuracy metric: it uses only held-out subjects and the balanced genuine/impostor split makes accuracy directly interpretable as the fraction of correctly classified pairs. The MM pool measures in-distribution performance. The MN and NM pools are all-impostor; their accuracy is the true rejection rate for cross-membership pairs.
+
+Table~\ref{tab:four_case} reports accuracy and AUC for MM and NN across the three within-dataset configurations. The AUC gap (MM $-$ NN) indicates how much more discriminatively the model handles its training subjects compared to held-out subjects.
+
+\begin{table}[htbp]
+\centering
+\caption{Four-case authenticator evaluation. MM and NN use balanced genuine/impostor pairs; MN and NM are all-impostor (accuracy $=$ true rejection rate). NN accuracy is the held-out generalisation metric.}
+\label{tab:four_case}
+\begin{tabular}{lrrrrrr}
+\toprule
+Dataset & MM acc & MM AUC & NN acc & NN AUC & MN acc & NM acc \\
+\midrule
+whuGAIT & \whugaitFourCaseMMAcc & \whugaitFourCaseMMAuc & \whugaitFourCaseNNAcc & \whugaitFourCaseNNAuc & \whugaitFourCaseMNAcc & \whugaitFourCaseNMAcc \\
+UCI-HAR & \uciharFourCaseMMAcc  & \uciharFourCaseMMAuc  & \uciharFourCaseNNAcc  & \uciharFourCaseNNAuc  & \uciharFourCaseMNAcc  & \uciharFourCaseNMAcc  \\
+WISDM   & \wisdmFourCaseMMAcc   & \wisdmFourCaseMMAuc   & \wisdmFourCaseNNAcc   & \wisdmFourCaseNNAuc   & \wisdmFourCaseMNAcc   & \wisdmFourCaseNMAcc   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The MM--NN AUC gap (MM AUC minus NN AUC) quantifies how much more discriminatively the model handles its training subjects relative to held-out ones. A positive gap indicates that the LSTM has fitted training pairs more tightly than it generalises to unseen subjects: members produce higher, more consistent deltas, while non-members produce a weaker, noisier response. This asymmetry is the structural prerequisite for the attacks in Chapters~\ref{ch:evasion} and~\ref{ch:mia}: where the gap is larger, the attack has a stronger signal to exploit; where it approaches zero, the model generalises comparably to both populations and the membership signal weakens. All configurations show a positive gap, confirming that overfitting to training subjects is a consistent property of the pipeline across datasets.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{analysis/models_four_case_summary.png}
+  \caption{Four-case accuracy (MM, NN, MN, NM) and MM vs.\ NN AUC across the three within-dataset configurations. The AUC gap between MM and NN quantifies how much more discriminatively the model handles enrolled subjects.}
+  \label{fig:four_case_summary}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{analysis/models_four_case_whuGAIT.png}
+    \caption{whuGAIT}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{analysis/models_four_case_ucihar.png}
+    \caption{UCI-HAR}
+  \end{subfigure}
+  \vspace{0.5em}
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{analysis/models_four_case_wisdm.png}
+    \caption{WISDM}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{analysis/models_four_case_combined.png}
+    \caption{Combined}
+  \end{subfigure}
+  \caption{Score distributions across the four pair-type pools for all configurations. The separation between MM and NN genuine/impostor distributions is tighter for enrolled subjects than for held-out ones, consistent with the accuracy gaps in Table~\ref{tab:four_case}. The Combined configuration shows the weakest separation, reflecting the cross-dataset distribution shift.}
+  \label{fig:four_case_detail}
+\end{figure}

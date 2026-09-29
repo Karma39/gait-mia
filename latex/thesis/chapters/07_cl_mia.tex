@@ -1,0 +1,234 @@
+% Chapter 7 — Continual Learning and Membership Inference
+% Analyses whether the CDML continual-learning scheme reduces MIA vulnerability
+% when an LSTM authenticator is built on top of the CL-trained CNN backbone.
+
+\input{../generated/nb08b_cl_auth_metrics}
+
+\chapter{Continual Learning and Membership Inference}
+\label{ch:cl_mia}
+
+The pairwise LSTM authenticator operates in open-set mode: it scores any two windows without requiring prior enrolment, so new subjects can be authenticated without retraining. Continual learning is not a functional requirement here; it is a privacy variable. The hypothesis is that training the CNN encoder incrementally across subject groups reduces the per-subject memorisation that drives the MIA signal. This chapter tests that hypothesis by comparing a standard sequential backbone with a CDML backbone (Section~\ref{ssec:bg_cdml}) and measuring the effect on MIA AUC. The CNN encoder of Milani~\cite{milani2024gait} is trained across four sequential tasks of 24 subjects each, and an LSTM authenticator is trained on the frozen backbone.
+
+The AUC gap between the two backbones is \clMiaCLMIAAUCGap{} (standard CL: \clMiaCLMIAStdAUC{}; CDML: \clMiaCLMIACdmlAUC{}). The CDML modulation is applied after the feature-map tap used by the authenticator, so the LSTM never receives a modulated embedding and the MIA surface is unchanged. The per-subject boundary calibration that authentication requires is the same signal the MIA exploits: any scheme that substantially reduces that signal also degrades authentication, bounding what any CL mechanism can achieve here.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{CDML and Attacker Model}
+\label{sec:cl_cdml}
+
+The LSTM authenticator built on top of the CL backbone calls \texttt{get\_feature\_maps()}, which taps the convolutional feature maps after the fourth convolutional block and before the flatten layer. At this point the convolutional feature tensor has shape $(B,\,128,\,1,\,16)$, which the LSTM receives as a sequence of $16$ frames of 128-dimensional feature vectors per window. The modulation $\mathbf{s}_k$ is applied after the flatten layer, downstream of this tap. The LSTM therefore receives unmodulated feature maps regardless of which code, if any, is active in the identification head. The attacker's position is identical: they query the authenticator output without needing to know or use any code. Figure~\ref{fig:cdml_arch} illustrates the full data path.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{cdml_architecture.png}
+  \caption{CDML encoder architecture. The task-specific binary code $\mathbf{s}_k \in \{-1,+1\}^{2048}$ is injected after the flatten layer, before the FC identification head ($\tilde{\mathbf{h}} = \mathbf{h} \odot \mathbf{s}_k$). The LSTM authenticator taps the convolutional feature maps at the Conv4 output, upstream of the modulation point, and therefore never receives the code.}
+  \label{fig:cdml_arch}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Experimental Setup}
+\label{sec:cl_setup}
+
+\subsection{Task Design}
+\label{ssec:cl_tasks}
+
+The 118 whuGAIT subjects are partitioned as follows. The 98 subjects that serve as members in the standard experiment (Chapter~\ref{ch:system}) are divided into four sequential tasks of 24 subjects each, yielding 96 member subjects across the four tasks. The 2 remaining subjects from the 98-member pool are treated as additional non-members, joining the 20 held-out subjects to form a non-member pool of 22 subjects. Table~\ref{tab:cl_split} summarises the partition.
+
+\begin{table}[htbp]
+\centering
+\caption{Subject partition for the CL experiment.}
+\label{tab:cl_split}
+\begin{tabular}{lrl}
+\toprule
+Role & Subjects & Source \\
+\midrule
+Task 0 members & 24 & whuGAIT training split \\
+Task 1 members & 24 & whuGAIT training split \\
+Task 2 members & 24 & whuGAIT training split \\
+Task 3 members & 24 & whuGAIT training split \\
+Held-out non-members & 20 & whuGAIT Dataset~2 \\
+Leftover non-members &  2 & whuGAIT training split (unassigned) \\
+\midrule
+Total members       & 96 & \\
+Total non-members   & 22 & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+To eliminate task-size confounds in the MIA comparison, the training windows for each task are subsampled to the minimum window count across all four tasks before training begins. The four tasks have 6{,}257, 7{,}116, 6{,}386, and 6{,}661 training windows respectively; all tasks are subsampled to 6{,}257 windows. Subsampling is performed once per task using a fixed random seed and held constant across the std and CDML runs.
+
+\subsection{Training Protocol}
+\label{ssec:cl_training}
+
+Two methods are compared:
+\begin{itemize}
+  \item \textbf{Std} (naive fine-tuning): the CNN is trained on each task in sequence with no mechanism to prevent forgetting. The classification head outputs over all 96 classes, but gradient updates from task $k$ overwrite representations learned during earlier tasks.
+  \item \textbf{CDML}: before each task, a binary code $\mathbf{s}_k$ is generated from seed $1000 + k$ and registered. The modulated embedding $\tilde{\mathbf{h}} = \mathbf{h} \odot \mathbf{s}_k$ is passed to the FC head during task $k$ training. The codes from all previous tasks remain registered for evaluation.
+\end{itemize}
+
+Both methods use the Adam optimiser with initial learning rate $10^{-3}$ and batch size 512, matching the single-task CNN (Chapter~\ref{ch:system}). Because each task spans only 24 subjects and training runs for 100 epochs per task, an exponential learning rate schedule ($\gamma = 0.9$ per epoch) is added to provide stronger regularisation as the model converges deeper into each task's small data distribution.
+
+After CL training, the encoder is frozen and an LSTM authenticator is trained on top of it using the same procedure and hyperparameters as Chapter~\ref{ch:system}. The checkpoint with the best test-set accuracy is retained. As discussed in Section~\ref{ssec:sys_auth_train}, selecting on the non-member test set is a conservative bias: the saved model generalises better to held-out subjects and is therefore less overfit to its training subjects, producing a weaker MIA signal. The reported AUCs are a lower bound.
+
+\subsection{Attacker Model}
+\label{ssec:cl_attacker}
+
+The attacker knows the LSTM architecture and has black-box query access to the authenticator. They do not know any CDML code and do not know which subjects belong to which task. The attack is the simple delta-MIA from Chapter~\ref{ch:mia}: for each subject $s$, the delta score is computed from gait windows not necessarily seen during training:
+\begin{equation}
+  \delta(s) = \bar{P}_{\text{imp}}(s) - \bar{P}_{\text{gen}}(s).
+\end{equation}
+The 96 member subjects form the positive class and the 22 non-member subjects form the negative class. AUC is reported over the binary classification of all 118 subjects by their delta scores.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Continual Learning Results}
+\label{sec:cl_results}
+
+\subsection{Forgetting Curves}
+\label{ssec:cl_forgetting}
+
+The std model loses all Task-0 accuracy after the first sequential update (0\% from Task 1 onward). CDML retains it throughout, dipping to 81.5\% after Task 2 before recovering to 92.8\% at the end of Task 3 (Table~\ref{tab:cl_forgetting}).
+
+\begin{table}[htbp]
+\centering
+\caption{Task-0 evaluation accuracy after each sequential training step. Std suffers complete catastrophic forgetting from Task 1 onward. CDML retains Task-0 accuracy throughout.}
+\label{tab:cl_forgetting}
+\begin{tabular}{lrr}
+\toprule
+Evaluation point & Std Task-0 acc & CDML Task-0 acc \\
+\midrule
+After Task 0 & 96.5\% & 96.6\% \\
+After Task 1 &  0.0\% & 91.8\% \\
+After Task 2 &  0.0\% & 81.5\% \\
+After Task 3 &  0.0\% & 92.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The transient dip at Task 2 reflects imperfect code-based separation: interference accumulates over sequential updates before partly reversing when Task 3 representations are established.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{whuGAIT/08a_cl_forgetting.png}
+  \caption{Left: Task-0 accuracy after each sequential training step, showing catastrophic forgetting in the std model and near-complete retention in CDML. Right: mean accuracy over all tasks seen so far. The std model's mean accuracy is carried entirely by the most recent task; CDML's mean accuracy reflects genuine multi-task retention.}
+  \label{fig:cl_forgetting}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Authentication on the CL Backbone}
+\label{sec:cl_auth}
+
+The LSTM authenticator is trained identically for both backbones with the CNN frozen. Test accuracy is 76.7\% (std) vs.\ 77.7\% (CDML): a small gap despite the std model retaining only Task-3 features, because those features alone support a useful authentication function. CDML's marginal advantage comes from the richer multi-task representation available to the authenticator.
+
+\begin{table}[htbp]
+\centering
+\caption{Per-task LSTM authentication accuracy. Each task's accuracy is evaluated on pairs drawn from that task's 24 subjects. Non-member accuracy (test) uses the 22 held-out subjects.}
+\label{tab:cl_auth}
+\begin{tabular}{lrr}
+\toprule
+Evaluation set & Std LSTM & CDML LSTM \\
+\midrule
+Task 0 (subjects 1--24)   & \clAuthStdTaskZero  & \clAuthCdmlTaskZero  \\
+Task 1 (subjects 25--48)  & \clAuthStdTaskOne   & \clAuthCdmlTaskOne   \\
+Task 2 (subjects 49--72)  & \clAuthStdTaskTwo   & \clAuthCdmlTaskTwo   \\
+Task 3 (subjects 73--96)  & \clAuthStdTaskThree & \clAuthCdmlTaskThree \\
+\midrule
+Mean (members)            & \clAuthStdMean      & \clAuthCdmlMean      \\
+Test (non-members, all)   & 76.7\% & 77.7\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{whuGAIT/08b_auth_per_task.png}
+  \caption{Per-task LSTM authentication accuracy for the std and CDML backbones. The dashed lines mark the per-method mean. The std backbone's accuracy on Tasks 0--2 is lower because the encoder's representations for those subjects have been overwritten by subsequent training.}
+  \label{fig:cl_auth_per_task}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Delta-MIA Results}
+\label{sec:cl_mia_results}
+
+\subsection{Main Results}
+\label{ssec:cl_mia_main}
+
+\begin{table}[htbp]
+\centering
+\caption{Delta-MIA results for std and CDML backbones. Member $\delta$ is the mean delta score over the 96 member subjects; NM $\delta$ is the mean over the 22 non-member subjects. Separation is their difference. AUC is the area under the ROC curve over all 118 subjects.}
+\label{tab:cl_mia_main}
+\begin{tabular}{lrrrr}
+\toprule
+Backbone & MIA AUC & Member $\delta$ & NM $\delta$ & Separation \\
+\midrule
+Std  & \clMiaCLMIAStdAUC  & \clMiaCLMIAStdMemDelta  & \clMiaCLMIAStdNMDelta  & \clMiaCLMIAStdSep  \\
+CDML & \clMiaCLMIACdmlAUC & \clMiaCLMIACdmlMemDelta & \clMiaCLMIACdmlNMDelta & \clMiaCLMIACdmlSep \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CDML produces a higher MIA AUC than std (\clMiaCLMIACdmlAUC{} vs.\ \clMiaCLMIAStdAUC{}). The member mean delta rises from \clMiaCLMIAStdMemDelta{} to \clMiaCLMIACdmlMemDelta{}, while the non-member mean delta falls slightly from \clMiaCLMIAStdNMDelta{} to \clMiaCLMIACdmlNMDelta{}. Both effects widen the member--non-member separation from \clMiaCLMIAStdSep{} to \clMiaCLMIACdmlSep{}.
+
+The std model's lower AUC is not evidence of better privacy. The std backbone has forgotten Tasks 0--2 entirely, so the authenticator's representations for those subjects' gait patterns are degraded. Members assigned to Tasks 0--2 produce lower delta scores not because their membership is harder to infer in principle, but because the underlying CNN representations are less coherent. This confounds the comparison: the std baseline benefits from forgetting-induced noise that suppresses the membership signal, but this suppression is inseparable from reduced authentication utility.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{whuGAIT/08c_delta_distributions.png}
+  \caption{Delta score distributions for member subjects (coloured) and non-member subjects (grey) for the std (left) and CDML (right) backbones. The CDML distribution shows a wider separation between the two populations, consistent with the higher MIA AUC.}
+  \label{fig:cl_delta_distributions}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{whuGAIT/08c_mia_roc.png}
+  \caption{Delta-MIA ROC curves for std and CDML backbones. CDML sits substantially above the std curve at all operating points. AUC values are shown in the legend.}
+  \label{fig:cl_mia_roc}
+\end{figure}
+
+\subsection{Comparison with the Standard Single-Task Experiment}
+\label{ssec:cl_mia_comparison}
+
+In the standard whuGAIT experiment (Chapter~\ref{ch:mia}), the simple-delta MIA AUC against the single-task authenticator is \whuGAITSimplDAUC{}. The CDML backbone in the CL setting achieves \clMiaCLMIACdmlAUC{}, which is higher. Part of this difference is attributable to the larger member pool (96 vs.\ 98 subjects) and the different non-member pool (22 vs.\ 20 subjects); however, the direction of the difference is consistent with the hypothesis that CDML representations are more subject-specific at the feature-map level. The std baseline (\clMiaCLMIAStdAUC{}) is lower than the single-task result, reflecting the representation degradation from forgetting.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Per-Task Analysis}
+\label{sec:cl_pertask}
+
+\subsection{Forgetting and MIA Vulnerability over Tasks}
+\label{ssec:cl_timeline}
+
+Figure~\ref{fig:cl_timeline} overlays Task-0 retention accuracy and per-task MIA AUC (each task's 24 members vs.\ the full non-member pool) against the sequential task index. A per-task AUC above 0.5 means those members are more detectable than non-members when the attack is restricted to that task.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{whuGAIT/08c_forgetting_mia_timeline.png}
+  \caption{Task-0 retention accuracy (dashed, left axis) and per-task MIA AUC (solid, right axis) plotted against the sequential task index, for std (red) and CDML (blue). For the std model, both curves collapse after Task 0. For the CDML model, the per-task MIA AUC remains elevated throughout, matching the pattern of the retention curve.}
+  \label{fig:cl_timeline}
+\end{figure}
+
+For the CDML backbone, the per-task MIA AUC follows the same qualitative pattern as the Task-0 retention: tasks whose representations are better preserved produce a stronger membership signal. Task 2 shows the smallest retention (81.5\%) and, correspondingly, a weaker MIA signal for those subjects; Tasks 0 and 3 show the highest retention and the strongest per-task attack. For the std backbone, the per-task MIA AUC collapses after Task 0 in the same way as the retention accuracy, confirming that the signal suppression is a byproduct of forgetting rather than a privacy property.
+
+\subsection{Authentication Accuracy vs.\ MIA AUC}
+\label{ssec:cl_scatter}
+
+Figure~\ref{fig:cl_scatter} plots the per-task authentication accuracy against the per-task MIA AUC, with one point per task per backbone. The two quantities are positively correlated: tasks where the authenticator performs better are also the tasks where the membership signal is stronger. This positive relationship holds for both backbones and is consistent with the conclusion that both authentication accuracy and MIA vulnerability are driven by the same underlying quantity, namely how well the backbone has retained subject-specific representations.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{whuGAIT/08c_scatter_auth_mia.png}
+  \caption{Authentication accuracy vs.\ per-task MIA AUC for std (red circles) and CDML (blue squares), one point per task. Points are labelled T0--T3. The positive correlation between authentication utility and MIA vulnerability holds within each backbone.}
+  \label{fig:cl_scatter}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Discussion}
+\label{sec:cl_discussion}
+
+The main finding of this chapter is that CDML's privacy guarantee does not extend to the authentication layer when the LSTM taps the CNN at the feature-map level. The code $\mathbf{s}_k$ is applied after the tap point, so modifying its value has no effect on what the LSTM receives and no effect on the attacker's observations.
+
+The indirect effect of CDML on MIA runs in the opposite direction from what a naive privacy argument would predict. CDML prevents catastrophic forgetting, which means the CNN representations for all four tasks remain informative and subject-specific. This is exactly the property that makes the authenticator more accurate and simultaneously makes the membership signal stronger: the LSTM can discriminate member genuine pairs from member impostor pairs more reliably, producing larger deltas for members relative to non-members.
+
+The finding generalises the signal disentanglement result from Section~\ref{sec:mia_signal}. That experiment showed that the CNN encoder contributes an independent membership signal through the authentication head by shaping subject-specific representations. The CL experiment shows that an encoder trained to retain more subject-specific representations across a longer sequence of tasks produces a proportionally stronger signal.
+
+One practical implication concerns continual learning deployments where privacy is a stated goal. If CDML is deployed to protect the identification head, the authentication component built on the same backbone inherits an increased privacy risk compared with a baseline that allows forgetting. Protecting the authentication layer would require either applying the code modulation at or before the feature-map tap point used by the authenticator, or training a separate authenticator whose feature extraction is not shared with the CL backbone.
+
+% ─────────────────────────────────────────────────────────────────────────────
+

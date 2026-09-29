@@ -82,6 +82,15 @@
 \providecommand{\combinedColdLiraRawAUC}{\tbd}
 \providecommand{\combinedColdLiraLfAUC}{\tbd}
 \providecommand{\combinedColdLiraMfAUC}{\tbd}
+% ── new MIA signals ──
+\providecommand{\whuGAITHiddenDeltaAUC}{\tbd}
+\providecommand{\uciharHiddenDeltaAUC}{\tbd}
+\providecommand{\wisdmHiddenDeltaAUC}{\tbd}
+\providecommand{\combinedHiddenDeltaAUC}{\tbd}
+\providecommand{\whuGAITPgdMiaAUC}{\tbd}
+\providecommand{\uciharPgdMiaAUC}{\tbd}
+\providecommand{\wisdmPgdMiaAUC}{\tbd}
+\providecommand{\combinedPgdMiaAUC}{\tbd}
 % ── signal disentanglement ──
 \providecommand{\signalAuthModelAUCB}{\tbd}
 \providecommand{\signalAuthModelAUCA}{\tbd}
@@ -124,6 +133,14 @@
 \input{../generated/compare_evasion_combined_metrics}
 \IfFileExists{../generated/signal_disentanglement_metrics.tex}%
   {\input{../generated/signal_disentanglement_metrics}}{}
+\IfFileExists{../generated/compare_mia_new_whuGAIT_metrics.tex}%
+  {\input{../generated/compare_mia_new_whuGAIT_metrics}}{}
+\IfFileExists{../generated/compare_mia_new_ucihar_metrics.tex}%
+  {\input{../generated/compare_mia_new_ucihar_metrics}}{}
+\IfFileExists{../generated/compare_mia_new_wisdm_metrics.tex}%
+  {\input{../generated/compare_mia_new_wisdm_metrics}}{}
+\IfFileExists{../generated/compare_mia_new_combined_metrics.tex}%
+  {\input{../generated/compare_mia_new_combined_metrics}}{}
 
 % ── metadata ──────────────────────────────────────────────────────────────────
 \title{\large\textbf{Gait MIA Pipeline -- Results Summary}\\[2pt]

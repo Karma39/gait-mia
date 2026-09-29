@@ -53,3 +53,17 @@ class AuthModel(nn.Module):
         with torch.no_grad():
             logits = self.forward(x1, x2)
             return torch.softmax(logits, dim=1)[:, 1]
+
+    def get_hidden_state(self, feats: torch.Tensor) -> torch.Tensor:
+        """Alias for hidden_from_feats — same interface as ShadowLSTM.get_hidden_state."""
+        return self.hidden_from_feats(feats)
+
+    def hidden_from_feats(self, feats: torch.Tensor) -> torch.Tensor:
+        """Return last LSTM hidden state (B, 64) from pre-computed concatenated CNN features (B, 32, 128).
+
+        Bypasses the CNN — use when features have already been extracted with cnn.get_feature_maps().
+        Dropout is inactive (call after model.eval()).
+        """
+        with torch.no_grad():
+            out, _ = self.lstm(feats)
+            return out[:, -1, :]  # (B, 64)

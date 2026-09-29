@@ -67,11 +67,13 @@ NB01  Explore + split
         └─► NB03  Train authenticator (CNN+LSTM)
               ├─► NB04  MIA signal (per-subject delta)
               │     └─► NB05a  Delta variants (raw / logit-first / mean-first)
+              │                + hidden-layer centroid delta (Section 6)
               │         NB05b  Grey-box LiRA (target-init shadow models)
               │         NB05c  Threat model comparison (grey / warm / cold)
               └─► NB06a  Evasion setup (epsilon budget)
                     └─► NB06b  PGD impersonation attack
                           └─► NB06c  Attack validation (spectral, K-ablation)
+                                     + PGD budget as MIA signal (Section 7)
 
   [after all pipeline runs]
   ──► compare_models    cross-dataset accuracy and overfitting comparison
@@ -137,21 +139,22 @@ so the PDF is always consistent with the latest run.
 run_pipeline.py              entry point
 config.yaml                  all hyperparameters and quick-mode overrides
 REVIEW.md                    code-review findings log
+PROFESSOR_BRIEFING.md        post-meeting research plan and timetable
 
 notebooks/
   01_explore_*.ipynb         data exploration and subject split (one per dataset)
   02_train_cnn_encoder.ipynb CNN identification model
   03_train_authenticator.ipynb  CNN+LSTM authentication model
   04_mia_signal.ipynb        per-subject delta computation
-  05a_delta_analysis.ipynb   delta variant analysis
+  05a_delta_analysis.ipynb   delta variant analysis + hidden-layer centroid delta (§6)
   05b_mia_attack.ipynb       grey-box LiRA shadow attack
   05c_shadow_comparison.ipynb threat model comparison (grey/warm/cold)
   06a_attack_setup.ipynb     epsilon budget estimation
   06b_attack.ipynb           PGD evasion attack
-  06c_attack_validation.ipynb spectral analysis and K-ablation
+  06c_attack_validation.ipynb spectral analysis, K-ablation, PGD budget as MIA signal (§7)
   analysis/
     compare_models.ipynb          cross-dataset accuracy and overfitting
-    compare_mia.ipynb             cross-dataset MIA signal and LiRA results
+    compare_mia.ipynb             cross-dataset MIA signal, LiRA, hidden delta, PGD-as-MIA
     compare_evasion.ipynb         cross-dataset evasion results
     compare_combined.ipynb        deep dive on the combined run
     signal_disentanglement.ipynb  CNN vs auth memorisation signal (whuGAIT_signal run)
@@ -161,10 +164,12 @@ artifacts/{dataset}/         structured outputs consumed by analysis notebooks
   auth_pairs.npz             authentication pair arrays (X1, X2, y, subj)
   04_mia_scores.npz          per-subject delta scores
   05a_target_deltas.npz      delta variants for all subjects
+  05a_hidden_deltas.npz      hidden-layer centroid delta scores + AUC
   05b_per_subject_report.json  LiRA scores and predictions per subject
   05c_lira_{warm,cold}_shadows_{dataset}.json  shadow OUT-delta estimates
   06b_{dataset}_attack_results.npz  evasion results (test split)
   06b_{dataset}_train_attack_results.npz  evasion results (train split)
+  06c_{dataset}_pgd_mia_scores.npz  per-subject mean ε_min MIA scores
 
 checkpoints/{dataset}/       model weights (gitignored)
   cnn_encoder.pt
@@ -195,6 +200,8 @@ results/analysis/            cross-dataset figures written by analysis notebooks
   mia_nb05c_accuracy.png
   mia_nb05c_threat_models.png
   mia_roc_comparison.png
+  mia_new_signals_auc.png        new-signal AUC comparison (hidden δ + PGD-ε)
+  mia_new_signals_roc.png        ROC overlay for new signals vs simple-δ
   evasion_summary_bars.png
   evasion_eps_distribution.png
   evasion_train_vs_test.png
