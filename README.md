@@ -149,8 +149,6 @@ so the PDF is always consistent with the latest run.
 ```
 run_pipeline.py              entry point
 config.yaml                  all hyperparameters and quick-mode overrides
-REVIEW.md                    code-review findings log
-PROFESSOR_BRIEFING.md        post-meeting research plan and timetable
 
 notebooks/
   01_explore_*.ipynb         data exploration and subject split (one per dataset)
