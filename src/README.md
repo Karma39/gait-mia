@@ -40,7 +40,7 @@ WISDM stores raw timestamped CSV data per subject rather than pre-segmented wind
 
 ### pairs_loader.py
 
-The unified interface all notebooks use instead of calling dataset-specific loaders directly. `load_auth_pairs()` routes to the right source by dataset name: whuGAIT loads from raw files via `auth_dataset.py`, everything else loads from the pre-built `auth_pairs.npz`. `load_attribution()` handles the more subtle case of per-window subject attribution. For whuGAIT, this requires the `d5_attribution.npz` fingerprint lookup built in NB01, because Dataset #5's pair format doesn't encode subject IDs; for other datasets, subject IDs are recorded at pair-build time. `build_pair_subjects_train()` and `build_pair_subjects_test()` resolve which of the two windows in a cross-subject pair to attribute: for whuGAIT, it checks which subject is in the member or non-member set; for other datasets, `subj1` is always the subject of interest by construction.
+The unified interface all notebooks use instead of calling dataset-specific loaders directly. `load_auth_pairs()` loads from the pre-built `auth_pairs.npz` for all datasets (the split key `train`, `test`, `mn`, `nm` selects the right array prefix). `load_attribution()` returns per-window subject IDs from the same `auth_pairs.npz` file. `build_pair_subjects_train()` and `build_pair_subjects_test()` are thin wrappers that return `subj1` for the train and test splits respectively; `subj1` is always the subject of interest by construction.
 
 ---
 
@@ -50,7 +50,7 @@ The unified interface all notebooks use instead of calling dataset-specific load
 
 The shadow model training loop and LiRA evaluation. `ShadowLSTM` mirrors the LSTM head of `AuthModel` but operates on precomputed CNN feature maps rather than raw sensor input. This matters for speed: training K shadow models per run while also re-running the CNN forward pass would be prohibitively slow, so NB05b precomputes all feature maps once and hands them to the shadow training loop.
 
-`train_shadow_models()` supports three init modes (`target`, `warm_base`, `random`) and two split modes (`blind`, `member_aware`), covering the grey-box, warm black-box, and cold black-box threat models compared in NB05c. The checkpoint/resume logic writes to a JSON file every 8 shadows, so a long run can be interrupted and continued without re-training completed models. RNG state is always advanced for both draws regardless of which split mode is active, which ensures that a checkpointed run produces identical results to an uninterrupted one.
+`train_shadow_models()` supports three init modes (`target`, `warm_base`, `random`) and three split modes (`blind`, `member_aware`, `all_subjects`), covering the grey-box, warm black-box, and cold black-box threat models compared in NB05c. The checkpoint/resume logic writes to a JSON file every 8 shadows, so a long run can be interrupted and continued without re-training completed models. RNG state is always advanced for both draws regardless of which split mode is active, which ensures that a checkpointed run produces identical results to an uninterrupted one.
 
 `lira_eval()` fits a Gaussian on each subject's OUT-of-bag shadow deltas and computes a CDF score using that Gaussian as the null distribution. Subjects with fewer than 5 OUT-of-bag estimates are excluded rather than padded, because the Gaussian fit is unreliable with that little data.
 

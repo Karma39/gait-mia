@@ -4,8 +4,48 @@
 \section{Summary of Contributions}
 \label{sec:con_summary}
 
+This work examined the privacy exposure of gait-based biometric authentication systems, asking whether models deployed for user verification inadvertently reveal information about the individuals they were trained on. The work proceeded in three stages: establishing the attack surface, characterising the structure of the membership signal, and proposing a practical mitigation grounded in the continual learning framework used to train the system.
+
+\paragraph{System and evasion surface.}
+The whuGAIT pipeline separates identification pre-training, where the CNN learns subject-discriminative representations, from authentication, where the LSTM operates on frozen feature maps. This separation is the source of both the system's effectiveness and its privacy exposure. Chapter~\ref{ch:evasion} showed that the difficulty of mounting an adversarial evasion attack against the authenticator is not uniform across subjects: it varies systematically with whether a subject was seen during training. The per-pair evasion budget and step count therefore carry membership information, independent of any direct inspection of model outputs.
+
+\paragraph{Membership inference.}
+Chapter~\ref{ch:mia} built on this observation to mount membership inference attacks from several angles. Output-space and hidden-layer delta scores both distinguish training members from non-members at well above chance, and the evasion-derived signals add complementary information. Signal disentanglement showed that the LSTM authentication head is the dominant source of the vulnerability: subjects seen during authenticator training are more exposed than those seen only during CNN pre-training, suggesting that the authentication layer encodes membership more directly than the shared encoder. LiRA shadow-model attacks confirmed the vulnerability under a realistic black-box threat model.
+
+\paragraph{Continual learning as a privacy mechanism.}
+Chapter~\ref{ch:cl_mia} repurposed the CDML key mechanism, originally designed for gradient isolation across continual learning tasks, as a privacy control. The key modulates the CNN feature maps before they reach the LSTM; an operator who trains the LSTM with their own key produces a model whose membership signal is conditioned on that key. An attacker querying with the wrong key finds the signal collapsed to near chance. This connection between continual learning and privacy is the central finding of this research: the same architectural ingredient that prevents catastrophic forgetting can be made to enforce a form of key-gated access to the membership signal.
+
+The simpler initial configuration confirmed the privacy effect but exposed two failure modes: an authentication accuracy penalty relative to the standard baseline, and a degenerate bypass through a trivial constant code vector. The hybrid configuration, which uses a higher-dimensional per-channel code during CNN training and a broadcast key during LSTM training, addressed both. Stronger feature-map scrambling during the CL phase improves retention of task-specific representations, which transfers to authentication accuracy, and also eliminates the constant-code bypass because the unmodulated feature maps no longer carry exploitable membership structure. A multi-seed operator sweep confirmed that both properties are stable across independently trained authenticators and are not an artefact of any particular key choice.
+
 \section{Limitations}
 \label{sec:con_limitations}
 
+\paragraph{Scope of the key defence evaluation.}
+The key defence was evaluated against the output-space delta signal. The evasion-derived signals and the LiRA attack were characterised without the key in place, so it is not known whether the wrong-key condition suppresses those signals with the same consistency. The delta signal is the strongest and most direct, but a complete evaluation of the defence would need to cover all attack vectors demonstrated in Chapter~\ref{ch:mia}.
+
+\paragraph{Key space geometry.}
+The all-ones bypass is closed under the hybrid configuration, but the argument rests on the specific scrambling geometry of the high-dimensional per-channel code. The current system does not constrain the valid key space, so a sophisticated attacker could in principle search for low-weight codes that produce near-identity modulation. Hardening the key space is a practical engineering step that was not pursued here.
+
+\paragraph{Small non-member populations.}
+MIA metrics are point estimates over non-member populations that are small by the standards of the privacy literature. The conclusions drawn from whuGAIT, which has the largest held-out set, are the most reliable; the UCI-HAR and WISDM results should be treated as indicative rather than precise.
+
+\paragraph{Single architecture and sensor modality.}
+All experiments use the CNN+LSTM pipeline on accelerometer data. The structure of the membership signal, and the effectiveness of the key mechanism, are specific to this architecture and sensor type. Whether the same phenomena appear in transformer-based gait encoders or multimodal pipelines is an open question.
+
 \section{Future Work}
 \label{sec:con_future}
+
+\paragraph{Key defence against all MIA signals.}
+The most direct extension is to evaluate the hybrid key mechanism against the full set of attacks from Chapter~\ref{ch:mia}, including evasion-derived signals and LiRA. This would determine whether a single architectural change provides a unified privacy guarantee or whether each signal requires separate treatment.
+
+\paragraph{Key space hardening.}
+Restricting the valid key space to codes whose modulation effect exceeds a minimum magnitude would close the near-identity bypass in expectation. The practical question is how tight this constraint can be before it affects authentication accuracy or introduces new failure modes.
+
+\paragraph{Differentially private encoder training.}
+The residual membership signal that persists even under a wrong key originates in the CNN encoder, which encodes subject-specific structure during identification pre-training. Differentially private training at the CNN stage would address this residual independently of the key mechanism and could be combined with it for a two-layer defence.
+
+\paragraph{Multi-session and cross-dataset evaluation.}
+All experiments use single-session recordings. Natural intra-subject gait variability across sessions could weaken the membership signal or alter the evasion budget distribution in ways that affect both the attack and the defence. Evaluating on cross-session splits and across datasets would better characterise generalisation.
+
+\paragraph{Formal security analysis.}
+The defence is characterised empirically against a small set of attacker models. A formal treatment under a well-defined threat model, stating what the attacker knows and what constitutes a successful attack, would allow the guarantees to be stated precisely and would identify the conditions under which the key mechanism fails.

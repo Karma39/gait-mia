@@ -32,8 +32,8 @@ All lines marked `# <<< RUNNER INJECTS THIS` in a notebook cell are overwritten 
 |-----------|----------------|-------------|---------------|
 | `CNN_EPOCHS` | `cnn.epochs` (25) | 2 | NB02 |
 | `AUTH_EPOCHS` | `auth.epochs` (10) | 2 | NB03 |
-| `AUTH_LR` | `auth.lr` (0.0025) | — | NB03 |
-| `AUTH_DROPOUT` | `auth.dropout` (0.3) | — | NB03 |
+| `AUTH_LR` | `auth.lr` (0.0025) | n/a | NB03 |
+| `AUTH_DROPOUT` | `auth.dropout` (0.3) | n/a | NB03 |
 | `K_LIRA` | `lira.k_shadows` (32) | 4 | NB05b, NB05c |
 | `LIRA_EPOCHS` | `lira.epochs` (3) | 1 | NB05b, NB05c |
 | `SURROGATE_EPOCHS` | `lira.surrogate_epochs` (5) | 1 | NB05c |
@@ -80,7 +80,7 @@ Trains the whuGAIT CNN as a subject identifier. The useful part is the intermedi
 **Writes:** `checkpoints/{ds}/auth_model.pt`, `artifacts/{ds}/auth_norm_stats.npz`  
 **Injected:** `DATASET`, `AUTH_EPOCHS`, `AUTH_LR`, `AUTH_DROPOUT`
 
-The encoder stays frozen here deliberately: we're investigating what the CNN's representations leak, so letting the authenticator fine-tune the encoder during training would muddy the CNN signal. The normalisation stats computed from the train split are saved here and reused by NB04 through NB06, ensuring a consistent scale across the whole pipeline.
+The encoder stays frozen deliberately: the experiment isolates what the CNN's representations leak, so allowing the authenticator to fine-tune the encoder during training would conflate the two sources of signal. The normalisation stats computed from the train split are saved here and reused by NB04 through NB06, ensuring a consistent scale across the whole pipeline.
 
 ---
 
@@ -89,7 +89,7 @@ The encoder stays frozen here deliberately: we're investigating what the CNN's r
 **Reads:** `artifacts/{ds}/auth_pairs.npz`, `artifacts/{ds}/auth_norm_stats.npz`, `checkpoints/{ds}/auth_model.pt`  
 **Writes:** `artifacts/{ds}/04_mia_scores.npz`
 
-This is where we check whether a naive MIA is viable before investing in LiRA. If the model memorised training subjects, their same-person scores should cluster differently from held-out subjects. The saved scores are the input to everything in NB05. Before moving on, it's worth looking at the raw distributions: if the member/non-member gap inverts or disappears here, the LiRA formulation in NB05b needs to be adjusted.
+This notebook checks whether a naive MIA is viable before investing in LiRA. If the model memorised training subjects, their same-person scores should cluster differently from held-out subjects. The saved scores are the input to everything in NB05. Before moving on, it is worth inspecting the raw distributions: if the member/non-member gap inverts or disappears here, the LiRA formulation in NB05b needs to be adjusted.
 
 ---
 
@@ -121,9 +121,9 @@ The main MIA experiment. Shadow models start from the target's own weights (grey
 Answers whether the grey-box advantage is real or just an artifact of starting from good weights. Cold (random init) is the standard LiRA threat model: the attacker knows the architecture but not the weights. Warm (init from an attacker-trained surrogate) is the realistic black-box scenario. Grey (target weights) is the upper bound for an informed attacker. If cold LiRA matches grey-box, the CNN's representations are leaking as much membership signal as the LSTM activations do directly.
 
 Initialisation strategies compared:
-- **Grey** (NB05b): init from target weights
-- **Warm**: init from an attacker-trained surrogate model
-- **Cold**: random init (standard black-box LiRA)
+- **Grey** (NB05b): init from target weights (counterintuitively the weakest on most datasets, because all shadows share the same starting point and the OUT distributions cluster too tightly)
+- **Warm**: init from an attacker-trained surrogate (strongest on most datasets)
+- **Cold**: random init (standard black-box LiRA; approaches warm-start performance with more training epochs)
 
 ---
 
@@ -153,6 +153,42 @@ Finds the minimum ε that makes the authenticator accept an impostor by combinin
 **Writes:** `results/{ds}/06c_*.png`
 
 Checks whether the attack is doing something physically reasonable or just exploiting a numerical artifact. The FFT analysis shows whether perturbations concentrate at physiologically plausible frequencies. The K-ablation tells you whether more PGD steps keep helping, which matters for reporting a "converged" attack budget. The feature-space shift check is the critical one: if PGD barely moves the CNN embedding but still fools the LSTM, the vulnerability lives in the LSTM's generalisation, not the CNN encoder.
+
+---
+
+### NB06d: K-search MIA (`06d_k_search_mia.ipynb`)
+
+**Reads:** `artifacts/{ds}/06a_{ds}_attack_setup.npz`, `artifacts/{ds}/auth_norm_stats.npz`, `checkpoints/{ds}/auth_model.pt`  
+**Writes:** `artifacts/{ds}/06d_{ds}_ksearch_full.npz`, `artifacts/{ds}/06d_{ds}_ksearch_quarter.npz`, `results/{ds}/06d_*.png`
+
+Tests whether the minimum number of PGD steps needed to cross the decision boundary (N_min) carries more or less MIA signal than the minimum budget ε_min from NB06b. The budget is held fixed at ε_target (full) or ε_target/4 (quarter); the step count is searched over a geometric grid {1, 2, 4, 8, 16, 32, 64, 128}. Members generally require fewer steps, suggesting a signal direction. The AUC(N_min) reported here is compared to AUC(ε_min) from NB06b to assess whether step-count is a redundant or complementary signal.
+
+---
+
+### NB08a: CL CNN training (`08a_cl_cnn.ipynb`)
+
+**Reads:** `artifacts/whuGAIT/subject_split.json`, `artifacts/whuGAIT/auth_pairs.npz`  
+**Writes:** `checkpoints/whuGAIT/cl8/cdml_task{0-3}.pt`, `checkpoints/whuGAIT/cl8/std_task{0-3}.pt`
+
+Trains the GaitCNN encoder in a class-incremental continual learning setting. Two conditions are compared: naive sequential fine-tuning (Std) and the CDML mechanism (Milani WIFS 2024), which assigns each task a binary code `s_k ∈ {-1,+1}^d` applied at the Conv4 feature-map output. The code provides gradient isolation across tasks, reducing catastrophic forgetting. Per-task accuracy after full sequential training quantifies retention for each condition.
+
+---
+
+### NB08b: CL LSTM authenticator (`08b_cl_authenticator.ipynb`)
+
+**Reads:** `checkpoints/whuGAIT/cl8/cdml_task{0-3}.pt`, `artifacts/whuGAIT/cl8*/auth_pairs_cl.npz`  
+**Writes:** `checkpoints/whuGAIT/cl8_key128/auth_cdml_fm.pt`, `auth_cdml.pt`, `auth_std.pt`, `auth_fm_code.json`
+
+Trains the pairwise LSTM authenticator on top of the CL-trained CNN backbone. Three key-dimensionality configurations are evaluated: 128-dim broadcast (one pattern across all channels), 2048-dim per-channel (abandoned: inter-channel coherence breaks, LSTM stalls at 50%), and the 2048-CNN/128-LSTM hybrid (per-channel code during CNN training, broadcast key during LSTM training). The key is stored in `auth_fm_code.json` separately from the model checkpoint and is never serialised into the `.pt` file.
+
+---
+
+### NB08c: MIA on CL authenticator (`08c_cl_mia.ipynb`)
+
+**Reads:** `checkpoints/whuGAIT/cl8_key128/auth_cdml_fm.pt`, `auth_fm_code.json`, `artifacts/whuGAIT/auth_pairs.npz`  
+**Writes:** `results/whuGAIT/08c_*.png`, `latex/generated/nb08_fm_metrics.tex`
+
+Evaluates the delta-MIA attack under three key conditions (no key, correct key, wrong key) and a six-seed operator sweep (seeds 2000, 4000, 5000, 6000, 7000, 8000). The central result: an attacker holding the model weights but not the key obtains near-random MIA AUC; the legitimate operator (correct key) retains full attack surface. A residual above-random AUC under the wrong key is attributed to CNN-level memorisation, not the LSTM.
 
 ---
 

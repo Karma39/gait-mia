@@ -4,34 +4,37 @@ import torch.nn as nn
 
 from .gait_cnn import GaitCNN
 
+# Feature-map shape at Conv4 output: (B, FM_CHANNELS, FM_FEATURES)
+FM_CHANNELS  = 16
+FM_FEATURES  = 128
+
 
 class CDMLGaitCNN(nn.Module):
-    """GaitCNN with a Code Division Modulation Layer (CDML).
+    """GaitCNN with a Code Division Modulation Layer (CDML) at the feature-map level.
 
-    Before the FC classification head, the 2048-dim embedding is modulated
-    element-wise by a task-specific binary code s_k ∈ {-1, +1}^2048:
-        h̃ = h ⊙ s_k
-    Different tasks see differently-rotated embeddings from the FC head's
-    perspective, reducing gradient interference between tasks (Milani, WIFS 2024).
+    Two key sizes are supported via *fm_code_dim*:
 
-    Privacy note: the code is applied AFTER the flatten, downstream of the
-    get_feature_maps() tap used by the LSTM authenticator.  The authenticator
-    therefore receives unmodulated conv4 feature maps regardless of which code
-    is active — the CDML privacy guarantee does not extend to the authentication
-    layer.
+        fm_code_dim=128  (default, per-feature):
+            code shape (128,) — broadcast across all 16 channels
+            out = conv4(x) * code[None, None, :]       # (B, 16, 128)
 
-    Usage:
-        model = CDMLGaitCNN(n_classes=98)
-        model.register_code(task_id=0, seed=42)
-        model.set_task(0)           # activate code for task 0
-        logits = model(x)
+        fm_code_dim=2048 (per-channel-per-feature):
+            code shape (2048,) stored flat, reshaped to (16, 128) at apply time
+            out = conv4(x) * code.view(16, 128)[None, :, :]   # (B, 16, 128)
+            4× more entropy; stronger gradient isolation and harder MIA without key.
+
+    During Phase 1 (CL training) per-task codes provide gradient isolation.
+    During Phase 2 (LSTM auth training) a fixed global key conditions the surface.
     """
 
-    def __init__(self, n_classes: int, n_channels: int = 6):
+    def __init__(self, n_classes: int, n_channels: int = 6, fm_code_dim: int = 128):
         super().__init__()
-        self.backbone = GaitCNN(n_classes=n_classes, n_channels=n_channels)
-        self.embedding_dim = 2048
-        # codes[task_id] = float32 tensor of shape (2048,) with values ±1
+        if fm_code_dim not in (FM_FEATURES, FM_CHANNELS * FM_FEATURES):
+            raise ValueError(
+                f"fm_code_dim must be {FM_FEATURES} (per-feature) or "
+                f"{FM_CHANNELS * FM_FEATURES} (per-channel-per-feature), got {fm_code_dim}")
+        self.backbone    = GaitCNN(n_classes=n_classes, n_channels=n_channels)
+        self.code_dim    = fm_code_dim
         self._codes: dict[int, torch.Tensor] = {}
         self._active_code: torch.Tensor | None = None
 
@@ -42,20 +45,23 @@ class CDMLGaitCNN(nn.Module):
         return self.backbone.fc
 
     def register_code(self, task_id: int, seed: int) -> None:
-        """Generate and store the ±1 binary code for *task_id* from *seed*."""
         rng = np.random.default_rng(seed)
-        raw = rng.choice([-1.0, 1.0], size=self.embedding_dim).astype(np.float32)
+        raw = rng.choice([-1.0, 1.0], size=self.code_dim).astype(np.float32)
         self._codes[task_id] = torch.from_numpy(raw)
 
     def set_task(self, task_id: int) -> None:
-        """Activate the code for *task_id*.  Call before each forward pass."""
         if task_id not in self._codes:
             raise KeyError(f"No code registered for task {task_id}. "
                            "Call register_code() first.")
         self._active_code = self._codes[task_id]
 
+    def set_fm_code_direct(self, code: torch.Tensor) -> None:
+        if code.shape != (self.code_dim,):
+            raise ValueError(f"code must be shape ({self.code_dim},), "
+                             f"got {tuple(code.shape)}")
+        self._active_code = code.float()
+
     def clear_task(self) -> None:
-        """Deactivate modulation (identity forward pass, useful for eval)."""
         self._active_code = None
 
     def get_code(self, task_id: int) -> torch.Tensor:
@@ -64,19 +70,21 @@ class CDMLGaitCNN(nn.Module):
     # ── nn.Module interface ─────────────────────────────────────────────────
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        """2048-dim embedding *before* modulation (for t-SNE / distance analysis)."""
+        """2048-dim embedding without any code applied."""
         return self.backbone.encode(x)
 
-    def encode_modulated(self, x: torch.Tensor) -> torch.Tensor:
-        """2048-dim embedding *after* applying the active code."""
-        h = self.backbone.encode(x)
-        if self._active_code is not None:
-            h = h * self._active_code.to(x.device)
-        return h
-
     def get_feature_maps(self, x: torch.Tensor) -> torch.Tensor:
-        return self.backbone.get_feature_maps(x)
+        """Return (B, 16, 128) feature maps, modulated by the active code if set."""
+        out = self.backbone.get_feature_maps(x)
+        if self._active_code is not None:
+            code = self._active_code.to(x.device)
+            if self.code_dim == FM_FEATURES:
+                out = out * code[None, None, :]          # broadcast across channels
+            else:
+                out = out * code.view(FM_CHANNELS, FM_FEATURES)[None, :, :]  # per-channel
+        return out
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h = self.encode_modulated(x)
+        feat = self.get_feature_maps(x)   # (B, 16, 128), code applied if active
+        h    = feat.flatten(1)             # (B, 2048)
         return self.backbone.fc(h)

@@ -1,7 +1,9 @@
-# Membership Inference Attack on Gait Authentication
+# Membership Inference and Evasion Attacks on Continual Gait-Based Authentication
 
-Investigates Membership Inference Attacks (MIA) and evasion attacks on a gait authentication system built on the whuGAIT CNN (Zou et al. 2020). 
+Investigates identity inference attacks (MIA) and evasion attacks on a gait authentication system built on the whuGAIT CNN (Zou et al. 2020).
 The authenticator takes two gait windows and outputs P(different person). The MIA asks whether a subject was in the training set of the authentication LSTM; the signal also reflects CNN memorisation because a frozen encoder that has seen a subject produces tighter representations, amplifying the per-subject delta gap.
+
+The continual learning track (NB08a–c) trains the CNN encoder in a class-incremental setting using CDML feature-map codes (Milani WIFS 2024), then evaluates whether the code mechanism reduces MIA vulnerability for downstream operators who hold the model weights but not the key.
 
 ---
 
@@ -72,8 +74,9 @@ NB01  Explore + split
               │         NB05c  Threat model comparison (grey / warm / cold)
               └─► NB06a  Evasion setup (epsilon budget)
                     └─► NB06b  PGD impersonation attack
-                          └─► NB06c  Attack validation (spectral, K-ablation)
-                                     + PGD budget as MIA signal (Section 7)
+                          ├─► NB06c  Attack validation (spectral, K-ablation)
+                          │          + PGD budget as MIA signal (Section 7)
+                          └─► NB06d  K-search MIA (fixed budget, varying PGD steps)
 
   [after all pipeline runs]
   ──► compare_models    cross-dataset accuracy and overfitting comparison
@@ -82,7 +85,15 @@ NB01  Explore + split
   ──► compare_combined  deep dive on the combined run
 ```
 
-**Signal disentanglement run** (whuGAIT_signal — no evasion):
+**Continual learning track** (whuGAIT only, run independently):
+```
+NB08a  Train CDML + Std CNN encoders (4 sequential tasks, whuGAIT subjects)
+  └─► NB08b  Train LSTM authenticator on CDML backbone (128-dim / 2048-dim / hybrid)
+        └─► NB08c  MIA under key conditions (no key / correct key / wrong key)
+                   + multi-seed operator sweep (seeds 2000–8000)
+```
+
+**Signal disentanglement run** (whuGAIT_signal, no evasion):
 ```
 01_explore_whuGAIT_signal   build three-group split + auth_pairs from D1
   └─► NB02  Train CNN on group A (subjects 21–40)
@@ -152,6 +163,10 @@ notebooks/
   06a_attack_setup.ipynb     epsilon budget estimation
   06b_attack.ipynb           PGD evasion attack
   06c_attack_validation.ipynb spectral analysis, K-ablation, PGD budget as MIA signal (§7)
+  06d_k_search_mia.ipynb    K-search MIA: fixed budget, varying PGD step count
+  08a_cl_cnn.ipynb           CL CNN training (Std naive vs CDML, 4 sequential tasks)
+  08b_cl_authenticator.ipynb LSTM authenticator on CDML backbone (three key-dim configs)
+  08c_cl_mia.ipynb           MIA under key conditions + multi-seed operator sweep
   analysis/
     compare_models.ipynb          cross-dataset accuracy and overfitting
     compare_mia.ipynb             cross-dataset MIA signal, LiRA, hidden delta, PGD-as-MIA
@@ -170,10 +185,19 @@ artifacts/{dataset}/         structured outputs consumed by analysis notebooks
   06b_{dataset}_attack_results.npz  evasion results (test split)
   06b_{dataset}_train_attack_results.npz  evasion results (train split)
   06c_{dataset}_pgd_mia_scores.npz  per-subject mean ε_min MIA scores
+  06d_{dataset}_ksearch_full.npz    K-search results at ε_target
+  06d_{dataset}_ksearch_quarter.npz K-search results at ε_target / 4
 
 checkpoints/{dataset}/       model weights (gitignored)
   cnn_encoder.pt
   auth_model.pt
+  cl8/                       CL checkpoints: cdml_task{0-3}.pt, std_task{0-3}.pt
+  cl8_key128/                LSTM authenticator with 128-dim broadcast key
+    auth_cdml_fm.pt          LSTM trained with feature-map code (primary CL result)
+    auth_cdml.pt             LSTM on CDML backbone without key
+    auth_std.pt              LSTM on naive Std backbone
+    auth_fm_code.json        key configuration (seed, dimension); kept separate from .pt
+    auth_pairs_cl.npz        CL-split authentication pairs
 
 embeddings/{dataset}/cnn/    CNN encoder embeddings saved after NB02 (gitignored)
   train_embeddings.npy
@@ -233,6 +257,7 @@ documentation/               reference papers and original TF1 implementation
 | `wisdm` | WISDM | within-dataset | 51-class activity |
 | `combined` | all three | frozen whuGAIT | LSTM retrained cross-dataset |
 | `whuGAIT_signal` | whuGAIT | within-dataset | CNN vs auth memorisation signal disentanglement (subjects 1–60 only; no evasion) |
+| `cl8` / `cl8_key128` | whuGAIT | CDML (4 tasks) | CL track; run NB08a–c directly, not via run_pipeline.py |
 
 ---
 

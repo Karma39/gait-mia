@@ -42,7 +42,7 @@ The UCI Human Activity Recognition dataset~\cite{anguita2013human} contains reco
 \subsection{WISDM}
 \label{ssec:sys_wisdm}
 
-The WISDM dataset~\cite{kwapisz2011activity} contains accelerometer and gyroscope recordings from 51 subjects using a smartphone placed in a trouser pocket, sampled at approximately 20\,Hz. Six activities are labelled; only the walking activity is retained. Because the recordings are continuous rather than pre-segmented, windows of 128 samples (6.4 seconds at 20\,Hz) are extracted with a sliding window of stride 64, giving 50\% overlap between consecutive windows. The lower sampling rate means the 128-sample windows cover a longer time interval than in the 50\,Hz datasets, capturing more gait cycles per window.
+The WISDM dataset~\cite{weiss2019smartphone} contains accelerometer and gyroscope recordings from 51 subjects using a smartphone carried in the dominant-side trouser pocket, sampled at approximately 20\,Hz. Six activities are labelled; only the walking activity is retained. Because the recordings are continuous rather than pre-segmented, windows of 128 samples (6.4 seconds at 20\,Hz) are extracted with a sliding window of stride 64, giving 50\% overlap between consecutive windows. The lower sampling rate means the 128-sample windows cover a longer time interval than in the 50\,Hz datasets, capturing more gait cycles per window.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Subject Split and Pair Construction}
@@ -60,11 +60,30 @@ For the within-dataset configurations (whuGAIT, UCI-HAR, WISDM), the CNN encoder
 \subsection{Authentication Pair Inventory}
 \label{ssec:sys_pairs}
 
-For the whuGAIT dataset the fixed pair inventory from the original paper (D5) is used directly. D5 is distributed as two separate directories: a training set of 66,542 pairs involving subjects 21--118 and a test set of 7,600 pairs involving subjects 1--20; the member assignment is defined to match D5's existing partition.
-
-For UCI-HAR and WISDM no pre-built pair inventory exists, so one is constructed from the raw windows. The datasets ship with a predefined subject-level train/test split that is disjoint by construction, which is used as the member/non-member partition. Pairs are then sampled independently from the two window pools: member pairs are drawn from member windows only, and non-member pairs from non-member windows only, so the two groups never share windows. Each inventory is balanced between same-person and different-person pairs to avoid class imbalance in authentication training.
+For all three datasets a pair inventory is constructed from scratch using the raw window pools. Member pairs are drawn exclusively from member windows and non-member pairs from non-member windows, so the two groups never share windows. Each inventory is balanced between same-person and different-person pairs to avoid class imbalance in authentication training. For whuGAIT the member pool is the full set of windows from subjects 21--118 in Dataset~1, and the non-member pool is the full set of windows from subjects 1--20 in Dataset~2. The pair inventory distributed with the original paper (D5) is not used: constructing pairs from the raw windows gives full control over membership attribution and makes the pair construction procedure uniform across all three datasets.
 
 For the MIA attack, pair membership must be consistent with the subject membership label: a pair is a member pair if and only if both subjects in the pair are members. This \emph{member-aware} pair split ensures that the delta signal $\delta(s) = \bar{P}_\text{imp}(s) - \bar{P}_\text{gen}(s)$ is computed from pairs whose membership status is unambiguous.
+
+\subsection{Pair Type Taxonomy}
+\label{ssec:sys_pair_types}
+
+Each pair in the inventory is assigned a type based on the membership status of its two windows. Table~\ref{tab:pair_types} lists the four types; their roles and the full authenticator evaluation across all four pools are described in Section~\ref{sec:auth_eval}.
+
+\begin{table}[htbp]
+\centering
+\caption{Pair type taxonomy (M = member, N = non-member).}
+\label{tab:pair_types}
+\begin{tabular}{cccl}
+\toprule
+Type & Window 1 & Window 2 & Role \\
+\midrule
+MM & M & M & Authentication training set; in-distribution pairs \\
+NN & N & N & Test set; held-out population never seen during training \\
+MN & M & N & Cross-pool impostor; probe from a member \\
+NM & N & M & Cross-pool impostor; probe from a non-member \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{CNN Encoder}
@@ -177,35 +196,42 @@ Each group has 29 subjects so that the CNN and the LSTM are trained on the same 
 \section{Authenticator Evaluation}
 \label{sec:auth_eval}
 
-Before examining attacks against the model, it is useful to characterise how the authentication model behaves across four distinct pair-type pools. The four pools are constructed from member subjects (enrolled during training, $\mathcal{M}$) and non-member subjects (held out, $\mathcal{N}$):
-
-\begin{itemize}
-  \item \textbf{MM}: probe and gallery both from $\mathcal{M}$; 50\% genuine, 50\% impostor.
-  \item \textbf{NN}: probe and gallery both from $\mathcal{N}$; 50\% genuine, 50\% impostor.
-  \item \textbf{MN}: probe from $\mathcal{M}$, gallery from $\mathcal{N}$; 100\% impostor.
-  \item \textbf{NM}: probe from $\mathcal{N}$, gallery from $\mathcal{M}$; 100\% impostor.
-\end{itemize}
-
-The NN pool is the primary accuracy metric: it uses only held-out subjects and the balanced genuine/impostor split makes accuracy directly interpretable as the fraction of correctly classified pairs. The MM pool measures in-distribution performance. The MN and NM pools are all-impostor; their accuracy is the true rejection rate for cross-membership pairs.
-
-Table~\ref{tab:four_case} reports accuracy and AUC for MM and NN across the three within-dataset configurations. The AUC gap (MM $-$ NN) indicates how much more discriminatively the model handles its training subjects compared to held-out subjects.
+Before examining attacks against the model, it is useful to characterise how the authentication model behaves across the four pair-type pools defined in Section~\ref{ssec:sys_pair_types}. Table~\ref{tab:pool_description} summarises the composition of each pool and the metric it measures.
 
 \begin{table}[htbp]
 \centering
-\caption{Four-case authenticator evaluation. MM and NN use balanced genuine/impostor pairs; MN and NM are all-impostor (accuracy $=$ true rejection rate). NN accuracy is the held-out generalisation metric.}
-\label{tab:four_case}
-\begin{tabular}{lrrrrrr}
+\caption{Pair-pool composition and evaluation role. M = member ($\mathcal{M}$), N = non-member ($\mathcal{N}$).}
+\label{tab:pool_description}
+\begin{tabular}{llll}
 \toprule
-Dataset & MM acc & MM AUC & NN acc & NN AUC & MN acc & NM acc \\
+Pool & Probe & Gallery & Metric \\
 \midrule
-whuGAIT & \whugaitFourCaseMMAcc & \whugaitFourCaseMMAuc & \whugaitFourCaseNNAcc & \whugaitFourCaseNNAuc & \whugaitFourCaseMNAcc & \whugaitFourCaseNMAcc \\
-UCI-HAR & \uciharFourCaseMMAcc  & \uciharFourCaseMMAuc  & \uciharFourCaseNNAcc  & \uciharFourCaseNNAuc  & \uciharFourCaseMNAcc  & \uciharFourCaseNMAcc  \\
-WISDM   & \wisdmFourCaseMMAcc   & \wisdmFourCaseMMAuc   & \wisdmFourCaseNNAcc   & \wisdmFourCaseNNAuc   & \wisdmFourCaseMNAcc   & \wisdmFourCaseNMAcc   \\
+MM & $\mathcal{M}$ & $\mathcal{M}$ & In-distribution accuracy (50\% genuine, 50\% impostor) \\
+NN & $\mathcal{N}$ & $\mathcal{N}$ & Held-out accuracy; primary evaluation split \\
+MN & $\mathcal{M}$ & $\mathcal{N}$ & Cross-pool rejection rate (100\% impostor) \\
+NM & $\mathcal{N}$ & $\mathcal{M}$ & Cross-pool rejection rate (100\% impostor) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The MM--NN AUC gap (MM AUC minus NN AUC) quantifies how much more discriminatively the model handles its training subjects relative to held-out ones. A positive gap indicates that the LSTM has fitted training pairs more tightly than it generalises to unseen subjects: members produce higher, more consistent deltas, while non-members produce a weaker, noisier response. This asymmetry is the structural prerequisite for the attacks in Chapters~\ref{ch:evasion} and~\ref{ch:mia}: where the gap is larger, the attack has a stronger signal to exploit; where it approaches zero, the model generalises comparably to both populations and the membership signal weakens. All configurations show a positive gap, confirming that overfitting to training subjects is a consistent property of the pipeline across datasets.
+Table~\ref{tab:four_case} reports accuracy, AUC, and EER for MM and NN across the three within-dataset configurations. The AUC gap (MM $-$ NN) indicates how much more discriminatively the model handles its training subjects compared to held-out subjects. The EER (Equal Error Rate) gives the threshold-independent operating point where the false acceptance rate equals the false rejection rate on the held-out NN split.
+
+\begin{table}[htbp]
+\centering
+\caption{Four-case authenticator evaluation. MM and NN use balanced genuine/impostor pairs; MN and NM are all-impostor (accuracy $=$ true rejection rate). NN EER is the held-out operating point where FAR $=$ FRR.}
+\label{tab:four_case}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Dataset & MM acc & MM AUC & NN acc & NN AUC & NN EER & MN acc & NM acc \\
+\midrule
+whuGAIT & \whugaitFourCaseMMAcc & \whugaitFourCaseMMAuc & \whugaitFourCaseNNAcc & \whugaitFourCaseNNAuc & \eerWhuGaitAuth & \whugaitFourCaseMNAcc & \whugaitFourCaseNMAcc \\
+UCI-HAR & \uciharFourCaseMMAcc  & \uciharFourCaseMMAuc  & \uciharFourCaseNNAcc  & \uciharFourCaseNNAuc  & \eerUciharAuth  & \uciharFourCaseMNAcc  & \uciharFourCaseNMAcc  \\
+WISDM   & \wisdmFourCaseMMAcc   & \wisdmFourCaseMMAuc   & \wisdmFourCaseNNAcc   & \wisdmFourCaseNNAuc   & \eerWisdmAuth   & \wisdmFourCaseMNAcc   & \wisdmFourCaseNMAcc   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The MM--NN AUC gap (MM AUC minus NN AUC) quantifies how much more discriminatively the model handles its training subjects relative to held-out ones. A positive gap indicates that the LSTM has fitted training pairs more tightly than it generalises to unseen subjects: members produce higher, more consistent deltas, while non-members produce a weaker, noisier response. This asymmetry is the structural prerequisite for the attacks in Chapters~\ref{ch:evasion} and~\ref{ch:mia}: where the gap is larger, the attack has a stronger signal to exploit; where it approaches zero, the model generalises comparably to both populations and the membership signal weakens. All configurations show a positive gap, suggesting that differential fitting of training subjects is a consistent property of the pipeline across the datasets evaluated here.
 
 \begin{figure}[htbp]
   \centering

@@ -393,9 +393,15 @@
   {\input{../generated/compare_mia_new_combined_metrics}}{}
 \IfFileExists{../generated/nb08c_cl_mia_metrics.tex}
   {\input{../generated/nb08c_cl_mia_metrics}}{}
+\IfFileExists{../generated/eer_metrics.tex}
+  {\input{../generated/eer_metrics}}{}
+\IfFileExists{../generated/nb06d_asr_table_macros.tex}
+  {\input{../generated/nb06d_asr_table_macros}}{}
+\IfFileExists{../generated/nb06d_ksearch_metrics.tex}
+  {\input{../generated/nb06d_ksearch_metrics}}{}
 
 % ── metadata ──────────────────────────────────────────────────────────────────
-\title{Membership Inference and Evasion Attacks\\on Gait-Based Authentication}
+\title{Membership Inference and Evasion Attacks\\on Continual Gait-Based Authentication}
 \author{Matteo Campagnaro}
 \date{\today}
 
@@ -419,10 +425,10 @@
   \centering
   \vspace*{2cm}
   {\Large University of Padova\par}
-  {\large Department of Information Engineering\par}
+  {\large Department of Mathematics\par}
   \vspace{1.5cm}
   {\LARGE\bfseries Membership Inference and Evasion Attacks\\[6pt]
-   on Gait-Based Authentication\par}
+   on Continual Gait-Based Authentication\par}
   \vspace{2cm}
   {\large Master's Thesis in Cybersecurity\par}
   \vspace{2cm}
@@ -439,41 +445,27 @@
 
 % ── abstract ──────────────────────────────────────────────────────────────────
 \begin{abstract}
-Gait-based authentication uses inertial sensor recordings collected during
-ordinary device use to verify a user's identity, relying on the stability and
-person-specificity of natural walking patterns. Deep learning models trained for
-this task fit their training subjects closely enough to produce accurate
-authentication decisions, but that same fitting introduces a privacy
-vulnerability: the model's output behaviour may reveal which subjects were
-present in the training set.
+Gait-based biometric authentication verifies a person's identity from their
+walking patterns, captured by sensors. Rather than classifying subjects directly,
+the system learns a pairwise distance between gait windows, allowing new users to
+be enrolled without retraining the model from scratch.
 
-This thesis investigates membership inference attacks (MIA) on a gait
-authentication pipeline consisting of a CNN encoder trained for subject
-identification and a pairwise LSTM authentication head that scores whether two
-gait windows come from the same person. Two families of attack signal are
-evaluated across three inertial datasets (whuGAIT, UCI-HAR, WISDM) and a
-cross-dataset configuration: delta-based signals derived from the model's output
-scores or its hidden-layer representations, and shadow-model likelihood ratio
-attacks with different initialisation strategies ranging from black-box to
-grey-box. Additionally, a projected gradient descent (PGD) evasion attack
-measures the minimum perturbation budget required for successful impersonation
-relative to natural intra-subject gait variation, and the resulting per-subject
-budget serves as a further membership signal.
+Two families of attacks are evaluated across multiple datasets. For identity
+inference, score-based and LiRA shadow-model variants are assessed, including an
+experiment that isolates the memorisation contributions of the CNN and LSTM
+components independently. A PGD evasion attack additionally measures how much
+perturbation is needed to fool the authenticator relative to natural gait
+variability, and the resulting per-subject budget serves as a further identity
+inference signal.
 
-To identify where the leakage originates, a signal analysis separates the
-contribution of the CNN encoder from that of the LSTM authenticator by training
-the two components on disjoint subject populations. Finally, a continual
-learning variant of the CNN encoder is evaluated to determine whether
-incremental subject enrolment changes the privacy profile of the downstream
-authenticator.
-
-A membership signal above chance is detectable across all configurations. The
-LSTM authenticator is the primary source of leakage; the CNN encoder contributes
-an independent but smaller signal. No single attack variant dominates across
-datasets. Evasion perturbations that succeed tend to stay within the natural
-variation budget, and continual learning with code-based feature modulation
-slightly increases MIA vulnerability by preserving subject-specific
-representations more tightly than standard incremental training.
+The CDML feature-map code mechanism addresses the continual learning and privacy
+problems with a single design. Task-specific binary codes applied at the CNN
+feature maps prevent catastrophic forgetting across enrolment rounds, support
+distributed training without centralising raw data, and allow each operator to
+independently condition their own authentication surface with a private key. An
+attacker who holds the model weights but not the key obtains no meaningful
+membership signal, while authentication performance is preserved for the
+legitimate operator.
 
 \bigskip
 \noindent\textit{Keywords:} gait authentication, membership inference attack,

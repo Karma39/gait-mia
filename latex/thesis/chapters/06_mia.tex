@@ -1,7 +1,7 @@
 \chapter{Membership Inference Attack}
 \label{ch:mia}
 
-The authentication model fits enrolled subjects more tightly than held-out subjects. This creates a gap in the per-subject delta score $\delta(s)$ that membership inference attacks exploit. Two forms of the delta are evaluated: output-space and hidden-layer. A LiRA shadow-model attack is then applied with three threat-model variants, followed by an investigation into the delta formulation. The LSTM authentication head accounts for the larger share of the signal. The CNN encoder contributes independently but with smaller effect.
+The authentication model fits enrolled subjects more tightly than held-out subjects. This creates a gap in the per-subject delta score $\delta(s)$ that membership inference attacks exploit. Four membership signals are evaluated: an output-space delta, a hidden-layer delta, and two evasion-derived signals (minimum perturbation budget $\varepsilon_\text{min}$ and minimum step count $N_\text{min}$). A LiRA shadow-model attack is then applied with three threat-model variants, and the chapter closes with a signal disentanglement experiment that isolates the CNN encoder's and LSTM authenticator's individual contributions to the membership signal.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Attack Formulation}
@@ -38,7 +38,7 @@ The membership hypothesis is that the model fits its training subjects more tigh
   \mathbb{E}_{s \in \mathcal{M}}[\delta(s)]
   > \mathbb{E}_{s \in \mathcal{N}}[\delta(s)].
 \end{equation}
-An attack that uses $\delta(s)$ directly or a function of it to classify $s$ as member or non-member is evaluated by the area under the ROC curve (AUC) over the binary classification of all subjects. AUC $= 0.5$ corresponds to random guessing; AUC $= 1.0$ corresponds to perfect separation. TPR at 10\% FPR is reported alongside AUC as a single operating-point comparison across datasets.
+An attack that uses $\delta(s)$ directly or a function of it to classify $s$ as member or non-member is evaluated by the area under the ROC curve (AUC) over the binary classification of all subjects. AUC $= 0.5$ corresponds to random guessing; AUC $= 1.0$ corresponds to perfect separation. TPR at 10\% FPR is reported alongside AUC as a single operating-point comparison across datasets. The Equal Error Rate (EER) gives the threshold-independent operating point where the member detection rate equals the non-member miss rate.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Output-Space Delta}
@@ -46,25 +46,27 @@ An attack that uses $\delta(s)$ directly or a function of it to classify $s$ as 
 
 The simplest attack uses $\delta(s)$ directly as the membership score, with no shadow models. A subject $s$ is classified as a member if $\delta(s)$ exceeds a threshold. This attack requires only black-box query access to the model and knowledge of which windows belong to which subject. Members tend to produce higher deltas because the LSTM has been trained directly on their pairs, making it more discriminative for their gait patterns. Non-members have never been seen during training, so their genuine and impostor pairs are scored with less precision and the gap is smaller.
 
-TPR values are coarse due to the small non-member population (9--20 subjects per dataset) and should be read as approximate operating points.
+All reported metrics are point estimates over small non-member populations (9--20 subjects per dataset).
 
 \begin{table}[htbp]
 \centering
-\caption{Output-space delta results. Mean threshold uses no ground-truth labels (attacker-realistic). TPR values are coarse due to small non-member populations (9--20 subjects).}
+\caption{Output-space delta results. EER is the equal error rate for member/non-member classification. TPR values are coarse due to small non-member populations (9--20 subjects).}
 \label{tab:output_delta}
-\begin{tabular}{lrrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-Configuration & AUC & TPR@10\% FPR & Mean-thr TPR & Mean-thr FPR \\
+Configuration & AUC & EER & TPR@10\% FPR & Mean-thr TPR & Mean-thr FPR \\
 \midrule
-whuGAIT  & \whuGAITSimplDAUC  & \whuGAITSimplDTPRten  & \miaMeanTPR       & \miaMeanFPR       \\
-UCI-HAR  & \uciharSimplDAUC   & \uciharSimplDTPRten   & \uciharMiaMeanTPR & \uciharMiaMeanFPR \\
-WISDM    & \wisdmSimplDAUC    & \wisdmSimplDTPRten    & \wisdmMiaMeanTPR  & \wisdmMiaMeanFPR  \\
-Combined & \combinedSimplDAUC & \combinedSimplDTPRten & \combinedMiaMeanTPR & \combinedMiaMeanFPR \\
+whuGAIT  & \whuGAITSimplDAUC  & \eerWhuGaitMIA  & \whuGAITSimplDTPRten  & \miaMeanTPR       & \miaMeanFPR       \\
+UCI-HAR  & \uciharSimplDAUC   & \eerUciharMIA   & \uciharSimplDTPRten   & \uciharMiaMeanTPR & \uciharMiaMeanFPR \\
+WISDM    & \wisdmSimplDAUC    & \eerWisdmMIA    & \wisdmSimplDTPRten    & \wisdmMiaMeanTPR  & \wisdmMiaMeanFPR  \\
+Combined & \combinedSimplDAUC & \eerCombinedMIA & \combinedSimplDTPRten & \combinedMiaMeanTPR & \combinedMiaMeanFPR \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The output-space delta produces AUC above 0.5 in all four configurations, confirming that a membership signal is present across datasets. Configurations with longer windows or less cross-dataset distribution shift tend to produce stronger signals, as the model has more subject-specific structure to memorise. The combined configuration is the hardest case, since cross-dataset shift limits how tightly the LSTM fits individual subjects. The mean threshold can exploit the signal without membership labels, but its structural weakness is a global cut-off that ignores subject-level variance in the delta distribution.
+The output-space delta produces AUC above 0.5 in all four configurations, indicating that some membership signal is present across datasets. Configurations with longer windows or less cross-dataset distribution shift tend to produce stronger signals, as the model has more subject-specific structure to memorise. The combined configuration is the hardest case, since cross-dataset shift limits how tightly the LSTM fits individual subjects. The mean threshold can exploit the signal without membership labels, but its structural weakness is a global cut-off that ignores subject-level variance in the delta distribution.
+
+The output-space delta produces a measurable membership signal on whuGAIT (EER \eerWhuGaitMIA{}), indicating that the subject-level score separation is substantial relative to the model's overall discrimination margin.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Hidden-Layer Delta}
@@ -127,47 +129,43 @@ where $\boldsymbol{\mu}_\text{imp}(s)$ and $\boldsymbol{\mu}_\text{gen}(s)$ are 
 \subsubsection{Results}
 \label{ssec:mia_hidden_results}
 
-Table~\ref{tab:hidden_delta} shows that the hidden-layer centroid delta tracks the output-space delta closely across all configurations. The additional dimensionality of $\mathbf{h}_T$ does not yield a stronger membership signal: because the final classifier is a single linear layer, centroid distance in the 64-dimensional hidden space and the scalar output distribution are related by the same learned projection. Any direction in $\mathbf{h}_T$ that separates member and non-member distributions must already be captured by that projection, so no new information is accessible at this layer beyond what the output score exposes.
+Table~\ref{tab:hidden_delta} shows that the hidden-layer centroid delta tracks the output-space delta closely across all configurations. The additional dimensionality of $\mathbf{h}_T$ does not yield a stronger membership signal. A plausible explanation is that the membership signal is concentrated in the subspace the final FC layer projects onto: a linear map from 64 to 2 dimensions followed by softmax. If the member/non-member separation in $\mathbf{h}_T$ is aligned with that projection, the scalar output score already captures the membership-relevant component, and measuring centroid distance over all 64 dimensions adds noise from the remaining directions without recovering additional signal.
 
 \begin{table}[htbp]
 \centering
 \caption{Hidden-layer centroid delta results. Mean threshold uses no ground-truth labels (attacker-realistic). TPR values are coarse due to small non-member populations.}
 \label{tab:hidden_delta}
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrr}
 \toprule
-Configuration & Hidden-$\delta$ AUC & Mean-thr TPR & Mean-thr FPR \\
+Configuration & Hidden-$\delta$ AUC & EER & Mean-thr TPR & Mean-thr FPR \\
 \midrule
-whuGAIT  & \whuGAITHiddenDeltaAUC  & \hiddenMeanTPR       & \hiddenMeanFPR       \\
-UCI-HAR  & \uciharHiddenDeltaAUC   & \uciharHiddenMeanTPR & \uciharHiddenMeanFPR \\
-WISDM    & \wisdmHiddenDeltaAUC    & \wisdmHiddenMeanTPR  & \wisdmHiddenMeanFPR  \\
-Combined & \combinedHiddenDeltaAUC & \combinedHiddenMeanTPR & \combinedHiddenMeanFPR \\
+whuGAIT  & \whuGAITHiddenDeltaAUC  & \eerWhuGaitHiddenDelta  & \hiddenMeanTPR         & \hiddenMeanFPR         \\
+UCI-HAR  & \uciharHiddenDeltaAUC   & \eerUciharHiddenDelta   & \uciharHiddenMeanTPR   & \uciharHiddenMeanFPR   \\
+WISDM    & \wisdmHiddenDeltaAUC    & \eerWisdmHiddenDelta    & \wisdmHiddenMeanTPR    & \wisdmHiddenMeanFPR    \\
+Combined & \combinedHiddenDeltaAUC & \eerCombinedHiddenDelta & \combinedHiddenMeanTPR & \combinedHiddenMeanFPR \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 % ─────────────────────────────────────────────────────────────────────────────
-\section{PGD Budget as Membership Signal}
+\section{PGD Attack as Membership Signal}
 \label{sec:mia_pgd_signal}
 
-\subsubsection{Asymmetry Hypothesis}
-\label{ssec:mia_pgd_hyp}
+Both parameterisations of the adversarial attack from Chapter~\ref{ch:evasion} yield membership signals without additional model queries: enrolled subjects are harder to attack than held-out ones, and both the minimum budget $\varepsilon_\text{min}$ and the minimum step count $N_\text{min}$ capture this asymmetry at the subject level.
 
-The minimum perturbation budget $\varepsilon_\text{min}$ established in Chapter~\ref{ch:evasion} for each impostor pair reflects how tightly the model's decision boundary encloses the genuine class for that subject. A model that has been trained on a subject's pairs places the genuine cluster in a highly structured, tightly bounded region of input space; an impostor needs a larger perturbation to cross that boundary. A held-out subject's genuine cluster, having never been fitted, is less tightly bounded, so impersonation requires less perturbation.
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Budget Signal ($\varepsilon_\text{min}$)}
+\label{ssec:mia_pgd_eps}
 
-If this asymmetry holds across subjects, the per-subject mean $\bar{\varepsilon}_\text{min}(s)$ over all impostor pairs in which $s$ participates as the impostor functions as an aggregate membership signal: pairs drawn from the training split, where both subjects are enrolled, should require larger minimum budgets than pairs from the test split, where both subjects are held out.
-
-Formally, for a subject $s$, let $\mathcal{A}_s$ be the set of impostor pairs in which $s$ acts as the impostor and that were successfully attacked within $\varepsilon_\text{max}$. The signal is:
+A model fitted on a subject's pairs places their genuine cluster in a tightly bounded region; an impostor needs a larger perturbation to cross the boundary. For a held-out subject, the boundary is looser, so attacks cost less. The per-subject mean budget
 \begin{equation}
   \bar{\varepsilon}_\text{min}(s)
   = \frac{1}{|\mathcal{A}_s|}
-    \sum_{i \in \mathcal{A}_s} \varepsilon^{(i)}_\text{min}.
+    \sum_{i \in \mathcal{A}_s} \varepsilon^{(i)}_\text{min},
 \end{equation}
-Subjects for which $\mathcal{A}_s = \emptyset$ are excluded from the AUC computation. The signal is evaluated by comparing $\bar{\varepsilon}_\text{min}$ across enrolled subjects (from the training-split attack) and held-out subjects (from the test-split attack), using the same binary-search PGD protocol in both cases.
+where $\mathcal{A}_s$ is the set of successfully attacked impostor pairs in which $s$ acts as the impostor, is used as the membership score. Subjects with $\mathcal{A}_s = \emptyset$ are excluded.
 
-An important limitation of this design is that the two attack populations are not directly comparable. The training-split pairs have enrolled subjects on both sides of each pair (impostor and target), while the test-split pairs have held-out subjects on both sides. Consequently, it is not possible to isolate whether the $\varepsilon_\text{min}$ difference arises from the target subject being enrolled (the intended signal) or from the impostor subject also being enrolled. The signal is best interpreted as a group-level aggregate: training-split attacks are systematically harder than test-split attacks, rather than as a per-subject membership signal for the target subject specifically.
-
-\subsubsection{Results}
-\label{ssec:mia_pgd_results_v2}
+A structural limitation applies: training-split pairs have enrolled subjects on both sides and test-split pairs have held-out subjects on both sides, so $\bar{\varepsilon}_\text{min}$ captures a group-level aggregate rather than a per-subject signal for the target specifically.
 
 \begin{table}[htbp]
 \centering
@@ -185,47 +183,90 @@ Combined & \combinedPgdMiaAUC & \combinedSimplDAUC \\
 \end{tabular}
 \end{table}
 
-For UCI-HAR and WISDM, the training-split attack covered all available impostor combos, giving enrolled subjects a comparable number of attacked pairs to the held-out subjects. The resulting AUC values (\uciharPgdMiaAUC{} and \wisdmPgdMiaAUC{}) are therefore meaningful comparisons between member and non-member mean budgets under similar coverage.
+On UCI-HAR and WISDM, coverage is balanced and the AUCs (\uciharPgdMiaAUC{} and \wisdmPgdMiaAUC{}) are meaningful. The combined configuration gives \combinedPgdMiaAUC{}, near chance: the cross-domain boundary is too loosely fitted for budget differences to carry membership information. On whuGAIT, training-split coverage is incomplete, so the AUC is unreliable (see Section~\ref{sec:mia_signal_comparison}).
 
-For the combined configuration, the AUC of \combinedPgdMiaAUC{} is essentially random. The per-subject decision boundary is too loosely fitted in the cross-domain setting for the PGD budget to carry membership information, consistent with the lower output-space delta on that configuration.
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Step-Count Signal ($N_\text{min}$)}
+\label{ssec:mia_pgd_nmin}
 
-The underlying limitation of this signal is structural: the coverage asymmetry between training-split and test-split attacks, combined with the confounded impostor/target membership status, makes the signal unreliable whenever the training set is large relative to the combo budget.
+Section~\ref{sec:ev_nmin} showed that enrolled subjects require more gradient steps to attack. The per-subject mean $N_\text{min}$ is used directly as a membership score: a high value indicates a complex, memorisation-consistent boundary. No additional model queries are needed beyond the fixed-budget PGD runs that produce $N_\text{min}$; crucially, these runs do not require the binary search used by $\varepsilon_\text{min}$ — an attacker can identify a suitable fixed budget from the plateau in Figure~\ref{fig:nmin_budget_ablation} without running the full budget-search pipeline.
+
+\begin{table}[htbp]
+  \centering
+  \caption{$N_\text{min}$ MIA performance across datasets at full budget ($\varepsilon_\text{target}$) and at the calibrated operating point ($\varepsilon_\text{target}/16$). AUC and EER are computed at the subject level.}
+  \label{tab:nmin_mia}
+  \begin{tabular}{lcccc}
+    \toprule
+    Dataset  & AUC($\varepsilon_\text{target}$) & EER($\varepsilon_\text{target}$) & AUC($\varepsilon/16$) & EER($\varepsilon/16$) \\
+    \midrule
+    whuGAIT  & \ksMIANminAUCFullwhuGAIT & \ksMIANminEERFullwhuGAIT & \ksMIANminAUCQuarterwhuGAIT & \ksMIANminEERQuarterwhuGAIT \\
+    UCI-HAR  & \ksMIANminAUCFullucihar  & \ksMIANminEERFullucihar  & \ksMIANminAUCQuarterucihar  & \ksMIANminEERQuarterucihar  \\
+    WISDM    & \ksMIANminAUCFullwisdm   & \ksMIANminEERFullwisdm   & \ksMIANminAUCQuarterwisdm   & \ksMIANminEERQuarterwisdm   \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+At the full budget $\varepsilon_\text{target}$, nearly all pairs are solved and $N_\text{min}$ carries little signal: AUC is near chance on whuGAIT (\ksMIANminAUCFullwhuGAIT{}) and WISDM (\ksMIANminAUCFullwisdm{}), and modest on UCI-HAR (\ksMIANminAUCFullucihar{}). The signal improves substantially when the budget is tightened to $\varepsilon_\text{target}/16$: AUC reaches \ksMIANminAUCQuarterwhuGAIT{} (EER \ksMIANminEERQuarterwhuGAIT{}) on whuGAIT, \ksMIANminAUCQuarterucihar{} on UCI-HAR, and \ksMIANminAUCQuarterwisdm{} on WISDM. Figure~\ref{fig:nmin_budget_ablation} shows the full budget-sensitivity curve on whuGAIT. AUC improves monotonically as the budget tightens. The EER stabilises between $\varepsilon_\text{target}/8$ and $\varepsilon_\text{target}/32$, indicating that the signal in that range reflects a consistent member/non-member separation rather than an artefact of the particular budget value; $\varepsilon_\text{target}/16$ sits within this stable region and is selected as the operating point because it falls near the median of the per-pair $\varepsilon_\text{min}$ distribution (Section~\ref{sec:ev_budget}): this anchors the choice to an observable property of the data rather than an arbitrary position within the plateau. Any value in the stable region would yield similar conclusions; $\varepsilon_\text{target}/16$ is reported as the representative point.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{whuGAIT/06d_whuGAIT_nmin_budget_ablation.png}
+  \caption{whuGAIT: $N_\text{min}$ MIA signal quality as a function of the fixed PGD budget (log scale).
+           Top: AUC (left axis, blue) and EER (right axis, red); vertical reference lines mark
+           the 10th, 25th and 50th percentiles of the per-pair $\varepsilon_\text{min}$ distribution.
+           Bottom: cumulative pair solve rates for NN (non-member) and MM (member) pools.
+           The EER plateau between $\varepsilon/8$ and $\varepsilon/32$ identifies the stable operating region;
+           $\varepsilon/16$ is selected as the operating point within this region.}
+  \label{fig:nmin_budget_ablation}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{whuGAIT/06d_whuGAIT_ksearch_mia.png}
+  \caption{Per-subject mean $N_\text{min}$ distribution for members and non-members on whuGAIT at $\varepsilon_\text{target}/16$.
+           Right panel: scatter of subject-level mean $N_\text{min}$ vs mean $\varepsilon_\text{min}$, showing the two signals are correlated but not redundant.}
+  \label{fig:nmin_mia}
+\end{figure}
+
+$\varepsilon_\text{min}$ measures the radius to the nearest adversarial example; $N_\text{min}$ at a fixed budget measures the gradient resolution required to find it. The budget calibration links the two: tightening the fixed budget toward the dataset's natural $\varepsilon_\text{min}$ scale forces the attack into a regime where member boundaries are measurably harder than non-member ones. An attacker who has observed the $\varepsilon_\text{min}$ distribution on publicly accessible non-member pairs can use it to calibrate the operating budget without any ground-truth membership labels.
+
+A practical cost applies: the full $N_\text{min}$ grid requires eight PGD runs per pair, roughly eight times the cost of a single $\varepsilon_\text{min}$ run. When compute is limited, $\varepsilon_\text{min}$ is the default; $N_\text{min}$ is worth the overhead when a calibrated budget near the dataset's $\varepsilon_\text{min}$ percentile is available.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Signal Comparison}
 \label{sec:mia_signal_comparison}
 
-The output-space and hidden-layer deltas require only query and white-box access respectively; the PGD-budget signal additionally requires running the full adversarial attack pipeline from Chapter~\ref{ch:evasion} (Table~\ref{tab:signal_comparison}).
+The output-space and hidden-layer deltas require only query and white-box access respectively; the PGD-$\varepsilon$ and $N_\text{min}$ signals both require running the full adversarial attack pipeline from Chapter~\ref{ch:evasion}, but carry no extra computational cost beyond what evasion already produces (Table~\ref{tab:signal_comparison}).
 
 \begin{table}[htbp]
 \centering
-\caption{Comparison of the three shadow-free MIA signals. Output-$\delta$: black-box query access. Hidden-$\delta$: white-box activation access. PGD-$\varepsilon$: adversarial attack budget; coverage limitations apply for whuGAIT (see Section~\ref{ssec:mia_pgd_results_v2}).}
+\caption{Comparison of the four shadow-free MIA signals. Output-$\delta$: black-box query access. Hidden-$\delta$: white-box activation access. PGD-$\varepsilon$: adversarial attack budget ($\varepsilon_\text{min}$). $N_\text{min}$: step-count signal; same PGD runs, subject-level mean steps. $^\dagger$Incomplete training-split coverage on whuGAIT; AUC unreliable (see Section~\ref{ssec:mia_pgd_eps}).}
 \label{tab:signal_comparison}
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrr}
 \toprule
-Configuration & Simple-$\delta$ AUC & Hidden-$\delta$ AUC & PGD-$\varepsilon$ AUC \\
+Configuration & Simple-$\delta$ AUC & Hidden-$\delta$ AUC & PGD-$\varepsilon$ AUC & $N_\text{min}$ AUC \\
 \midrule
-whuGAIT  & \whuGAITSimplDAUC  & \whuGAITHiddenDeltaAUC  & \whuGAITPgdMiaAUC  \\
-UCI-HAR  & \uciharSimplDAUC   & \uciharHiddenDeltaAUC   & \uciharPgdMiaAUC   \\
-WISDM    & \wisdmSimplDAUC    & \wisdmHiddenDeltaAUC    & \wisdmPgdMiaAUC    \\
-Combined & \combinedSimplDAUC & \combinedHiddenDeltaAUC & \combinedPgdMiaAUC \\
+whuGAIT  & \whuGAITSimplDAUC  & \whuGAITHiddenDeltaAUC  & \whuGAITPgdMiaAUC$^\dagger$  & \whuGAITNminMiaAUC  \\
+UCI-HAR  & \uciharSimplDAUC   & \uciharHiddenDeltaAUC   & \uciharPgdMiaAUC   & \uciharNminMiaAUC   \\
+WISDM    & \wisdmSimplDAUC    & \wisdmHiddenDeltaAUC    & \wisdmPgdMiaAUC    & \wisdmNminMiaAUC    \\
+Combined & \combinedSimplDAUC & \combinedHiddenDeltaAUC & \combinedPgdMiaAUC & \combinedNminMiaAUC \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The delta signals dominate where coverage is sufficient: the PGD budget carries a confounded pair-level signal that cannot isolate individual subject membership. The hidden-layer delta adds no consistent gain, confirming that the linear classifier already exposes whatever the hidden state contains.
+The delta signals dominate where coverage is sufficient. $N_\text{min}$ at the calibrated $\varepsilon_\text{target}/16$ budget outperforms PGD-$\varepsilon$ on whuGAIT (\ksMIANminAUCQuarterwhuGAIT{} vs \pgdMiaAUCwhuGAIT{}) and WISDM (\ksMIANminAUCQuarterwisdm{} vs \pgdMiaAUCwisdm{}). On UCI-HAR the gap is smaller. On WISDM all evasion-based signals are weaker, consistent with the shallower memorisation shown by the $\varepsilon_\text{min}$ distribution. The hidden-layer delta adds no consistent gain over the output-space delta, confirming that the linear classifier already exposes whatever the hidden state contains.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.9\textwidth]{analysis/mia_new_signals_auc.png}
-  \caption{AUC of the three shadow-free membership signals across datasets. The dashed line marks the random-classifier baseline.}
+  \caption{AUC of the four shadow-free membership signals across datasets. The dashed line marks the random-classifier baseline (AUC $= 0.5$).}
   \label{fig:new_signals_auc}
 \end{figure}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{analysis/mia_new_signals_roc.png}
-  \caption{ROC curves for the output-space delta (dashed) and hidden-layer centroid delta (solid purple) per dataset configuration.}
+  \caption{ROC curves for the four shadow-free MIA signals (Simple-$\delta$, Hidden-$\delta$, PGD-$\varepsilon$, $N_\text{min}$) per dataset configuration, arranged in a 2$\times$2 grid. AUC values are shown in each legend.}
   \label{fig:new_signals_roc}
 \end{figure}
 
@@ -240,7 +281,7 @@ The LiRA attack requires training $K$ shadow LSTM models, each on a different su
 
 All shadow variants use the all-subjects split protocol. The full population of enrolled and held-out subjects is pooled together, and a random 50\% is drawn as the shadow-in set for each shadow $k$. Only pairs whose both windows come from subjects in the shadow-in set are used to train that shadow. Membership labels are not used during this assignment: the attacker has no prior knowledge of which subjects are members. For each target subject $s$, the OUT distribution is estimated from the shadows where $s$ fell outside the shadow-in set.
 
-Each shadow is trained for 3 epochs with the Adam optimiser, using the same hyperparameters as the target model (learning rate $2.5 \times 10^{-3}$, weight decay $1.5 \times 10^{-3}$, dropout 0.3). Three epochs keeps shadow training tractable at $K = 32$; whether additional epochs would change the attack success is not evaluated.
+Each shadow is trained for 3 epochs with the Adam optimiser, using the same hyperparameters as the target model (learning rate $2.5 \times 10^{-3}$, weight decay $1.5 \times 10^{-3}$, dropout 0.3). Three epochs is shorter than the target model's training budget (up to 10 epochs); the rationale is that shadow diversity across $K$ models matters more than individual shadow convergence, since the OUT distribution is estimated as an aggregate over all shadows in which the target subject was absent. To verify that the choice of $K = 32$ is not a limiting factor, the grey-box attack on whuGAIT was re-run with $K = 64$, doubling the number of OUT-of-bag delta samples per subject. The resulting AUC was 0.9010, compared to 0.9026 at $K = 32$, a difference of 0.0016 well within sampling noise. This stability suggests that the OUT distribution is already well-estimated at $K = 32$, and by extension that shadow convergence is not the limiting factor: if it were, a more stable distribution (from more shadows) would have produced a larger improvement. Whether matching the target's full training budget would further improve attack success is left as an open question.
 
 \subsection{Likelihood Ratio Score}
 \label{ssec:mia_lr_score}
@@ -270,12 +311,12 @@ The cold-start attacker knows only the model architecture. Each of the $K = 32$ 
 \subsubsection{Grey-Box Attack}
 \label{ssec:mia_grey}
 
-The grey-box attacker has access to the target model checkpoint. This is a stronger threat-model assumption than cold-start: the attacker not only knows the architecture but has the trained weights. Each shadow LSTM is initialised from those exact weights and fine-tuned for 3 epochs on its shadow-in subset under the all-subjects protocol. The hypothesis is that starting from the target model's prior gives the shadow a more informed starting distribution, sharpening the OUT Gaussian fit for each subject. In practice, the 3-epoch fine-tuning budget appears insufficient to escape this prior on whuGAIT, which likely explains the inverted signal observed there.
+The grey-box attacker has access to the target model checkpoint. This is a stronger threat-model assumption than cold-start: the attacker not only knows the architecture but has the trained weights. Each shadow LSTM is initialised from those exact weights and fine-tuned for 3 epochs on its shadow-in subset under the all-subjects protocol. The hypothesis is that starting from the target model's prior gives the shadow a more informed starting distribution, sharpening the OUT Gaussian fit for each subject. In practice, grey-box is the weakest variant on most datasets (see Table~\ref{tab:threat_comparison}): when all shadows share the same starting point, the OUT delta distributions cluster tightly around the target model's own behaviour, reducing the discriminative power of the likelihood ratio. whuGAIT is the exception, where grey-box ranks second behind warm-start, though both shadow variants outperform it on the remaining three configurations.
 
 \subsubsection{Warm-Start Black-Box Attack}
 \label{ssec:mia_warm}
 
-Like cold-start, the warm-start attacker knows only the model architecture and has no access to the target checkpoint. The idea is to recover some of the grey-box efficiency saving without the stronger access assumption: the attacker first trains a single surrogate LSTM from random initialisation for 5 epochs on all available pairs (the full combined pool under the all-subjects protocol), then uses those surrogate weights as the shared starting point for all $K$ shadow models, each of which is fine-tuned for 3 epochs on its shadow-in subset. The question is whether a shared warm initialisation can reduce effective per-shadow training cost while still producing diverse enough OUT distributions for the LiRA score.
+Like cold-start, the warm-start attacker knows only the model architecture and has no access to the target checkpoint. The idea is to recover some of the grey-box efficiency saving without the stronger access assumption: the attacker first trains a single surrogate LSTM from random initialisation for 5 epochs on all available pairs (the full combined pool under the all-subjects protocol), then uses those surrogate weights as the shared starting point for all $K$ shadow models, each of which is fine-tuned for 3 epochs on its shadow-in subset. The question is whether a shared warm initialisation can reduce effective per-shadow training cost while still producing diverse enough OUT distributions for the LiRA score. The performance gap between warm and cold therefore reflects a per-shadow epoch budget constraint rather than a fundamental difference in attacker knowledge: given sufficient training epochs, cold-start shadows converge toward the same solution and the gap narrows.
 
 \subsubsection{Results and Discussion}
 \label{ssec:mia_threat_results}
@@ -304,7 +345,7 @@ Config & Metric & Simple-$\delta$ & Grey & Warm & Cold \\
 \end{tabular}
 \end{table}
 
-Results vary across datasets and do not point to a single dominant strategy. On whuGAIT, warm-start is the strongest variant (\whuGAITWarmLiraRawAUC{}) followed by cold-start (\whuGAITColdLiraRawAUC{}), with grey-box the weakest (\whuGAITGreyLiraRawAUC{}). On UCI-HAR the pattern reverses between warm and cold: cold-start (\uciharColdLiraRawAUC{}) edges out warm-start (\uciharWarmLiraRawAUC{}). On WISDM, warm-start again leads (\wisdmWarmLiraRawAUC{} vs.\ cold \wisdmColdLiraRawAUC{}). On the combined configuration, both shadow variants outperform grey-box and simple-delta, with warm-start at \combinedWarmLiraRawAUC{}. Grey-box is consistently the weakest LiRA variant despite having the strongest access assumption: with only 3 epochs per shadow, fine-tuning from the target prior is insufficient to specialise the shadows, and the resulting OUT distribution is less diverse than what cold and warm-start produce from unconstrained random initialisation. TPR at 10\% FPR remains low across most configurations, limiting practical utility at a controlled false-positive rate. Given the 3-epoch shadow budget, these rankings should be read as indicative rather than definitive.
+Results vary across datasets and do not point to a single dominant strategy. On whuGAIT, warm-start leads (\whuGAITWarmLiraRawAUC{}), with grey-box second (\whuGAITGreyLiraRawAUC{}) and cold-start the weakest of the three (\whuGAITColdLiraRawAUC{}). On UCI-HAR the pattern shifts: cold-start is strongest (\uciharColdLiraRawAUC{}), warm-start close behind (\uciharWarmLiraRawAUC{}), and grey-box weakest (\uciharGreyLiraRawAUC{}). On WISDM, warm-start again leads (\wisdmWarmLiraRawAUC{} vs.\ cold \wisdmColdLiraRawAUC{}) and grey-box is weakest (\wisdmGreyLiraRawAUC{}). On the combined configuration warm-start reaches \combinedWarmLiraRawAUC{} and grey-box remains the weakest of the three (\combinedGreyLiraRawAUC{}). Grey-box is the weakest LiRA variant on three of the four configurations despite having the strongest access assumption: with only 3 epochs per shadow, fine-tuning from the target prior is insufficient to diversify the OUT distribution, which is what cold and warm-start produce from unconstrained initialisation. The whuGAIT exception may reflect dataset-specific structure where the target model's prior provides useful signal rather than collapsing shadow diversity. TPR at 10\% FPR remains low across most configurations, limiting practical utility at a controlled false-positive rate. Given the 3-epoch shadow budget, these rankings should be read as indicative rather than definitive.
 
 \begin{figure}[htbp]
   \centering
@@ -318,18 +359,16 @@ Results vary across datasets and do not point to a single dominant strategy. On 
   \centering
   \includegraphics[width=\textwidth]{analysis/mia_roc_comparison.png}
   \caption{MIA ROC curves for simple-$\delta$ and LiRA variants (grey-box
-           raw, cold-start raw, cold-start logit-first) across all four
-           dataset configurations. AUC values are shown in the legend. The
-           whuGAIT panel shows grey-box falling below the diagonal (inverted
-           signal), while cold-start sits well above it.}
+           raw, warm-start raw, cold-start raw) across all four
+           dataset configurations. AUC values are shown in the legend.}
   \label{fig:mia_roc}
 \end{figure}
 
 % ─────────────────────────────────────────────────────────────────────────────
-\section{Cold-Start Delta Variants}
+\section{LiRA Delta Variants}
 \label{sec:mia_delta_variants}
 
-Having established cold-start as the most effective and robust threat model, it remains to decide how to compute the delta score that feeds into the LiRA likelihood ratio. The original LiRA paper~\cite{carlini2022membership} applies a logit transform to the model's confidence before computing the membership statistic, which stabilises the tails of the score distribution for classification models. Here, the model outputs a pairwise probability rather than a classification confidence, so it is not obvious whether the same transformation is beneficial. Three formulations are tested.
+The choice of delta formulation is independent of the threat model and applies equally to warm-start and cold-start shadows. The original LiRA paper~\cite{carlini2022membership} applies a logit transform to the model's confidence before computing the membership statistic, which stabilises the tails of the score distribution for classification models. Here, the model outputs a pairwise probability rather than a classification confidence, so it is not obvious whether the same transformation is beneficial. Three formulations are tested for both warm and cold initialisation.
 
 \textbf{Raw} ($\delta_\text{raw}$): direct difference of mean scores,
 $\bar{P}_\text{imp}(s) - \bar{P}_\text{gen}(s)$. Simple and interpretable, but the scale of the difference compresses near 0 and 1 where probabilities saturate.
@@ -354,37 +393,44 @@ This is more stable when the number of pairs per subject is small, because a sin
 
 \begin{table}[htbp]
 \centering
-\caption{Cold-start LiRA results by delta variant. Simple-$\delta$ shown for reference.}
-\label{tab:cold_variants}
-\begin{tabular}{llrrrr}
+\caption{LiRA AUC and TPR at 10\% FPR by delta variant for warm-start and cold-start shadows. Cold shadows trained for 15 epochs; warm shadows for 3 epochs after a 5-epoch surrogate pre-training.}
+\label{tab:delta_variants}
+\small
+\begin{tabular}{ll rrrr rrrr}
 \toprule
-Config & Metric & Simple-$\delta$ & Cold-raw & Cold-lf & Cold-mf \\
+ & & \multicolumn{3}{c}{Warm-start} & & \multicolumn{3}{c}{Cold-start} \\
+\cmidrule(lr){3-5} \cmidrule(lr){7-9}
+Config & Metric & Raw & Lf & Mf & & Raw & Lf & Mf \\
 \midrule
 \multirow{2}{*}{whuGAIT}
-  & AUC         & \whuGAITSimplDAUC   & \whuGAITColdLiraRawAUC  & \whuGAITColdLiraLfAUC  & \whuGAITColdLiraMfAUC  \\
-  & TPR at 10\% FPR & \whuGAITSimplDTPRten & \whuGAITColdLiraRawTPRten & \whuGAITColdLiraLfTPRten & \whuGAITColdLiraMfTPRten \\
+  & AUC             & \whuGAITWarmLiraRawAUC  & \whuGAITWarmLiraLfAUC  & \whuGAITWarmLiraMfAUC  & & \whuGAITColdLiraRawAUC  & \whuGAITColdLiraLfAUC  & \whuGAITColdLiraMfAUC  \\
+  & TPR@10\%        & \whuGAITWarmLiraRawTPRten & \whuGAITWarmLiraLfTPRten & \whuGAITWarmLiraMfTPRten & & \whuGAITColdLiraRawTPRten & \whuGAITColdLiraLfTPRten & \whuGAITColdLiraMfTPRten \\
 \multirow{2}{*}{UCI-HAR}
-  & AUC         & \uciharSimplDAUC    & \uciharColdLiraRawAUC   & \uciharColdLiraLfAUC   & \uciharColdLiraMfAUC   \\
-  & TPR at 10\% FPR & \uciharSimplDTPRten  & \uciharColdLiraRawTPRten  & \uciharColdLiraLfTPRten  & \uciharColdLiraMfTPRten  \\
+  & AUC             & \uciharWarmLiraRawAUC   & \uciharWarmLiraLfAUC   & \uciharWarmLiraMfAUC   & & \uciharColdLiraRawAUC   & \uciharColdLiraLfAUC   & \uciharColdLiraMfAUC   \\
+  & TPR@10\%        & \uciharWarmLiraRawTPRten  & \uciharWarmLiraLfTPRten  & \uciharWarmLiraMfTPRten  & & \uciharColdLiraRawTPRten  & \uciharColdLiraLfTPRten  & \uciharColdLiraMfTPRten  \\
 \multirow{2}{*}{WISDM}
-  & AUC         & \wisdmSimplDAUC     & \wisdmColdLiraRawAUC    & \wisdmColdLiraLfAUC    & \wisdmColdLiraMfAUC    \\
-  & TPR at 10\% FPR & \wisdmSimplDTPRten   & \wisdmColdLiraRawTPRten   & \wisdmColdLiraLfTPRten   & \wisdmColdLiraMfTPRten   \\
+  & AUC             & \wisdmWarmLiraRawAUC    & \wisdmWarmLiraLfAUC    & \wisdmWarmLiraMfAUC    & & \wisdmColdLiraRawAUC    & \wisdmColdLiraLfAUC    & \wisdmColdLiraMfAUC    \\
+  & TPR@10\%        & \wisdmWarmLiraRawTPRten   & \wisdmWarmLiraLfTPRten   & \wisdmWarmLiraMfTPRten   & & \wisdmColdLiraRawTPRten   & \wisdmColdLiraLfTPRten   & \wisdmColdLiraMfTPRten   \\
 \multirow{2}{*}{Combined}
-  & AUC         & \combinedSimplDAUC  & \combinedColdLiraRawAUC & \combinedColdLiraLfAUC & \combinedColdLiraMfAUC \\
-  & TPR at 10\% FPR & \combinedSimplDTPRten & \combinedColdLiraRawTPRten & \combinedColdLiraLfTPRten & \combinedColdLiraMfTPRten \\
+  & AUC             & \combinedWarmLiraRawAUC & \combinedWarmLiraLfAUC & \combinedWarmLiraMfAUC & & \combinedColdLiraRawAUC & \combinedColdLiraLfAUC & \combinedColdLiraMfAUC \\
+  & TPR@10\%        & \combinedWarmLiraRawTPRten & \combinedWarmLiraLfTPRten & \combinedWarmLiraMfTPRten & & \combinedColdLiraRawTPRten & \combinedColdLiraLfTPRten & \combinedColdLiraMfTPRten \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Raw and mean-first perform similarly across datasets. Logit-first is generally weaker, possibly because gait pair scores cluster near 0 and 1 more than classification confidences do, making the per-pair logit numerically unstable for a larger fraction of pairs. Figure~\ref{fig:cold_variants} shows the three formulations side by side.
+The warm-start results show a consistent pattern across most datasets: raw leads or ties with mean-first, while logit-first is the weakest formulation. Warm shadows are well-calibrated near 0 and 1 because the surrogate pre-training anchors them close to the target distribution; applying the logit per pair before averaging then amplifies saturation noise rather than stabilising it. WISDM is the clearest example, where warm-raw reaches \wisdmWarmLiraRawAUC{} against \wisdmWarmLiraLfAUC{} for logit-first.
+
+Cold-start shows a different sensitivity. On whuGAIT, the three formulations are closer together (\whuGAITColdLiraRawAUC{} raw, \whuGAITColdLiraLfAUC{} logit-first, \whuGAITColdLiraMfAUC{} mean-first), because cold shadows trained for 15 epochs have had time to converge to a more uniform calibration, reducing the penalty that saturation imposes on logit-first. UCI-HAR is the exception in both conditions: cold-start outperforms warm-start on this dataset for all three variants, and logit-first reaches a perfect AUC of \uciharColdLiraLfAUC{}. This is a small-subject-count effect (21 subjects), where the Gaussian fit to the OUT distribution can be exact; the result should be read with that caveat rather than as a reliable upper bound.
+
+Figure~\ref{fig:delta_variants} shows the AUC comparison across all six formulations.
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{analysis/mia_nb05c_cold_variants.png}
-  \caption{Cold-start LiRA AUC by delta variant (raw, logit-first, mean-first)
-           across all four configurations. Raw and mean-first track closely;
-           logit-first underperforms on the combined run.}
-  \label{fig:cold_variants}
+  \includegraphics[width=0.92\textwidth]{analysis/mia_nb05c_combined_variants.png}
+  \caption{LiRA AUC by delta variant (raw, logit-first, mean-first) for
+           warm-start and cold-start shadows across all four configurations.
+           Cold shadows trained for 15 epochs.}
+  \label{fig:delta_variants}
 \end{figure}
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -414,7 +460,9 @@ D &  88--116 & yes & yes \\
 \end{tabular}
 \end{table}
 
-Group~A isolates the CNN encoder's contribution: the encoder has shaped their gait representations, but the authentication LSTM has never seen them. Group~B isolates the LSTM's contribution: the LSTM has fitted their pair scores directly, but the CNN treats them as unseen subjects with generic embeddings. Group~C is the held-out baseline that neither component trained on. Group~D trains both components on the same subjects; if the combined signal from~D exceeds the maximum of the individual signals from~A and~B, the two components act super-additively.
+Group~A isolates the CNN encoder's contribution: the encoder has shaped their gait representations, but the authentication LSTM has never seen them. Group~B isolates the LSTM's contribution: the LSTM has fitted their pair scores directly, but the CNN treats them as unseen subjects with generic embeddings. Group~C is the held-out baseline that neither component trained on. Group~D trains both components on the same subjects.
+
+Because each component trains on 58 subjects rather than the 98 used in the main pipeline, the absolute signal magnitudes in this experiment are not directly comparable to those in the preceding sections; the disentanglement results should be interpreted in terms of the relative ordering across groups rather than as absolute vulnerability levels. A further structural difference is that Group~C subjects are withheld from training but belong to the same Dataset~1 recording as the training subjects, whereas the non-members in the main whuGAIT experiment are drawn from Dataset~2, whose subjects (IDs~1--20) overlap with Dataset~1 but were recorded in a separate session. The two held-out populations are therefore not equivalent, and their delta distributions may differ for reasons unrelated to training membership.
 
 \subsection{Authentication Performance per Group}
 \label{ssec:mia_signal_auth}
@@ -454,8 +502,7 @@ Group~A sits above the held-out baseline despite the LSTM never having trained o
 
 \begin{table}[htbp]
 \centering
-\caption{Signal disentanglement MIA AUC. Each group is scored against Group~C (held-out baseline).
-         D/C tests whether the joint signal is super-additive.}
+\caption{Simple-$\delta$ MIA AUC for each group scored against Group~C (held-out baseline).}
 \label{tab:signal_mia}
 \small
 \begin{tabular}{lrrr}
@@ -467,52 +514,45 @@ Simple-$\delta$  & \signalMiaAUCBvsC    & \signalMiaAUCAvsC    & \signalMiaAUCDv
 \end{tabular}
 \end{table}
 
-Both Group~A and Group~B produce AUC above chance, confirming that each component independently contributes a membership signal. The magnitude of the two signals (\signalMiaAUCBvsC{} for the LSTM vs.\ \signalMiaAUCAvsC{} for the CNN) indicates their relative contributions.
-
-\paragraph{Interaction test.}
-If the CNN and LSTM memorisation signals were strictly additive, Group~D's signal should not exceed the larger of the A/C and B/C signals. The interaction difference $\text{AUC}(D/C) - \max(\text{AUC}(A/C),\,\text{AUC}(B/C)) = \signalMiaInteractionDiff{}$ quantifies whether the joint group shows super-additive leakage. A positive value would indicate the two components reinforce each other; a negative or near-zero value indicates that the signals do not compound.
-
-\paragraph{Operating-point analysis.}
-Setting the decision threshold to maintain $\text{FPR} = 0.10$ on Group~C yields the attack rates per group shown in Figure~\ref{fig:signal_confusion}. The threshold (\signalConfusionThresholdFPRTen{}) is derived from the 90th percentile of Group~C delta scores. Groups that exceed this threshold more than 10\% of the time carry more information about their subjects than can be explained by within-subject gait variability alone.
-
-\begin{figure}[htbp]
+\begin{figure}[h]
   \centering
-  \includegraphics[width=0.85\textwidth]{analysis/signal_confusion_per_group.png}
-  \caption{Attack outcome per group at a fixed FPR = 0.10 operating point
-           (threshold set on Group~C). Each group has 29 subjects. Groups~A
-           and~B show elevated predicted-member rates relative to Group~C,
-           reflecting the CNN and LSTM memorisation signals respectively.}
-  \label{fig:signal_confusion}
+  \includegraphics[width=0.60\textwidth]{analysis/signal_mia_auc_per_group.png}
+  \caption{Mean percentile rank of the Simple-$\delta$ MIA score by subject group
+           ($n=29$ per group, 116 subjects total). The random baseline is 0.50.
+           Groups~B and~D, whose subjects appeared in the LSTM authenticator
+           training, rank consistently above chance; Groups~A and~C do not,
+           confirming that the authenticator is the dominant source of
+           membership leakage.}
+  \label{fig:signal_auc_bar}
 \end{figure}
 
-Figure~\ref{fig:signal_auc_bar} shows the mean percentile rank of each group under two attack variants: simple-$\delta$ and LiRA-raw (grey-box). Shadow-based black-box attacks (cold-start, warm-start) are not included in the disentanglement analysis: a shadow set must be calibrated against a single consistent membership definition, but the 2$\times$2 design defines membership differently for each comparison (CNN training, authenticator training, or both). The simple-$\delta$ and grey-box LiRA, both of which use the target model directly, are the appropriate tools here.
+Both Group~A and Group~B produce AUC above chance, confirming that each component independently contributes a membership signal. The LSTM authenticator (B\,vs\,C) produces the stronger signal, while the CNN encoder (A\,vs\,C) contributes a weaker but non-negligible effect.
 
-\begin{figure}[htbp]
+\paragraph{Operating-point analysis.}
+Setting the decision threshold to maintain $\text{FPR} = 0.10$ on Group~C yields the attack rates per group shown in Figure~\ref{fig:signal_confusion}. Groups that exceed this threshold more than 10\% of the time carry more membership information than can be explained by within-subject gait variability alone.
+
+\begin{figure}[h]
   \centering
-  \includegraphics[width=0.85\textwidth]{analysis/signal_mia_auc_per_group.png}
-  \caption{Mean percentile rank of MIA attack score by subject group and attack
-           variant. The random baseline is 0.25 (four equal groups). Groups~A
-           and~B sitting above this baseline confirm independent memorisation
-           contributions from the CNN and LSTM components respectively.}
-  \label{fig:signal_auc_bar}
+  \includegraphics[width=0.75\textwidth]{analysis/signal_confusion_per_group.png}
+  \caption{Predicted-member rate (TPR) per group at a fixed FPR = 0.10
+           operating point (threshold set on Group~C, $n=29$ per group).
+           Group~C sits at the 10\% baseline by construction. Group~A (CNN
+           training only) shows a modest increase; Group~B (LSTM training
+           only) reaches 45\%, identifying the authenticator as the dominant
+           source of membership leakage.}
+  \label{fig:signal_confusion}
 \end{figure}
 
 \subsection{Factorial Interaction}
 \label{ssec:mia_signal_interaction}
 
-Figure~\ref{fig:signal_interaction} presents the 2$\times$2 interaction plot and the per-subject delta score distribution. The interaction line plot shows two lines: one tracing the effect of adding CNN training when the LSTM is absent (C$\to$A), and one tracing the same CNN effect when the LSTM is present (B$\to$D). Parallel lines indicate an additive relationship between the two training factors; converging or crossing lines indicate an interaction.
+Figure~\ref{fig:signal_interaction} shows the 2$\times$2 interaction plot and per-subject delta score distributions. The two lines trace the effect of adding CNN training when the LSTM is absent (C$\to$A) and when it is present (B$\to$D). The quantity $\text{AUC}(D/C) - \max(\text{AUC}(A/C),\,\text{AUC}(B/C))$ measures whether the joint group signal exceeds the stronger of the two individual components. The near-zero value observed here indicates that the CNN and LSTM contributions are approximately independent and do not compound.
 
-\begin{figure}[htbp]
+\begin{figure}[h]
   \centering
-  \includegraphics[width=\textwidth]{analysis/signal_interaction_strip.png}
-  \caption{Left: interaction plot for the signal disentanglement experiment. The two lines show the
-           effect of CNN training in the absence (C$\to$A) and presence (B$\to$D)
-           of LSTM training. Parallel lines indicate an additive effect;
-           deviation from parallelism measures the interaction term
-           $(\signalMiaInteractionDiff{})$.
-           Right: per-subject delta score distribution by group. Each point is
-           one subject; the bar marks the group mean $\pm$ 1 standard deviation.}
+  \includegraphics[width=0.85\textwidth]{analysis/signal_interaction_strip.png}
+  \caption{Interaction plot (left) and per-subject delta score distribution by group (right)
+           for the signal disentanglement experiment.}
   \label{fig:signal_interaction}
 \end{figure}
-
-
+\clearpage

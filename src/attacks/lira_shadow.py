@@ -197,7 +197,7 @@ def train_shadow_models(
                        pair (subj_win2_train from d5_attribution.npz). Used in member_aware mode
                        to prevent an OUT subject's gait from leaking into shadow training as x2.
 
-    The three threat models compared in NB05c (all use split_mode='member_aware'):
+    The three threat models compared in NB05c (all use split_mode='all_subjects'):
       grey-box   : init_mode='target'    (real target model weights)
       BB warm    : init_mode='warm_base' (attacker's own surrogate weights)
       BB cold    : init_mode='random'    (random init)
