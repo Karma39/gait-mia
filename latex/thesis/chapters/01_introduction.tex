@@ -51,7 +51,7 @@ The main contributions of this work are as follows.
 
 Chapter~\ref{ch:background} introduces the technical background: the properties of gait signals that make them suitable for authentication, the architecture of the CNN and LSTM components used in this work, and the formal framework for membership inference attacks including the LiRA construction.
 
-Chapter~\ref{ch:related} surveys prior work on gait-based authentication, membership inference on biometric and machine learning systems, and adversarial attacks on authentication models, and positions this work relative to that literature.
+Chapter~\ref{ch:related} surveys prior work on gait-based authentication, membership inference on biometric and machine learning systems, adversarial attacks on authentication models, and continual learning in relation to privacy, and positions this work relative to that literature.
 
 Chapter~\ref{ch:system} describes the three datasets used in the evaluation, the subject split and pair construction procedure, the CNN encoder and authentication model architectures, and the four experimental configurations. This chapter establishes the shared experimental setup on which all subsequent chapters depend.
 
@@ -59,6 +59,6 @@ Chapter~\ref{ch:evasion} presents the evasion attack: the PGD formulation, the p
 
 Chapter~\ref{ch:mia} presents the membership inference experiments. Several attack variants under different attacker knowledge assumptions are evaluated across four dataset configurations, including the evasion-derived signals from the previous chapter. The chapter closes with the signal disentanglement experiment, which uses non-overlapping subject groups to isolate the CNN encoder's and LSTM authenticator's independent contributions to the membership signal.
 
-Chapter~\ref{ch:cl_mia} evaluates the feature-map code defence as a response to the vulnerabilities identified in the two preceding chapters. A task-specific binary key applied at the CNN feature maps is shown to serve as a continual learning mechanism and as a privacy protection simultaneously. Authentication accuracy and membership inference vulnerability are compared across different key configurations.
+Chapter~\ref{ch:cl_mia} derives the threat model that makes the key-based defence precise, then evaluates the feature-map code defence as a response to the vulnerabilities identified in the two preceding chapters. A task-specific binary key applied at the CNN feature maps is shown to serve as a continual learning mechanism and as a privacy protection simultaneously. Authentication accuracy and membership inference vulnerability are compared across different key configurations.
 
 Chapter~\ref{ch:conclusions} summarises the findings, discusses the limitations of the experimental design, and identifies directions for future work.
